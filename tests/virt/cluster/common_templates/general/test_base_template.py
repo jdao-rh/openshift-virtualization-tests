@@ -42,6 +42,7 @@ VM_EXPECTED_ANNOTATION_KEYS = [
     Template.VMAnnotations.WORKLOAD,
 ]
 
+
 def fetch_osinfo_memory(osinfo_file_path, memory_test, resources_arch):
     """Fetch memory min and max values from the osinfo files."""
 
@@ -92,10 +93,10 @@ def check_default_and_validation_memory(get_base_templates, osinfo_memory_value,
 
 def get_rhel_templates_list(cluster_arch="amd64"):
     rhel_major_releases_list = ["7", "8", "9"]
-    template_suffix=""
+    template_suffix = ""
     if cluster_arch == "s390x":
         rhel_major_releases_list = ["8", "9"]
-        template_suffix=f"-{cluster_arch}"
+        template_suffix = f"-{cluster_arch}"
     return [
         f"rhel{release}-{workload}-{flavor}{template_suffix}"
         for release in rhel_major_releases_list
@@ -105,11 +106,13 @@ def get_rhel_templates_list(cluster_arch="amd64"):
 
 
 def get_fedora_templates_list(cluster_arch="amd64"):
-    template_suffix=""
+    template_suffix = ""
     if cluster_arch == "s390x":
-        template_suffix=f"-{cluster_arch}"
+        template_suffix = f"-{cluster_arch}"
     return [
-        f"fedora-{workload}-{flavor}{template_suffix}" for flavor in FEDORA_FLAVORS_LIST for workload in LINUX_WORKLOADS_LIST
+        f"fedora-{workload}-{flavor}{template_suffix}"
+        for flavor in FEDORA_FLAVORS_LIST
+        for workload in LINUX_WORKLOADS_LIST
     ]
 
 
@@ -132,9 +135,9 @@ def get_windows_templates_list(cluster_arch="amd64"):
 
 
 def get_centos_templates_list(cluster_arch="amd64"):
-    template_suffix=""
+    template_suffix = ""
     if cluster_arch == "s390x":
-        template_suffix=f"-{cluster_arch}"
+        template_suffix = f"-{cluster_arch}"
     centos_releases_list = ["-stream9"]
     return [
         f"centos{release}-{workload}-{flavor}{template_suffix}"
@@ -143,8 +146,9 @@ def get_centos_templates_list(cluster_arch="amd64"):
         for workload in [Template.Workload.SERVER, Template.Workload.DESKTOP]
     ]
 
+
 def get_template_arch_suffix():
-    return  infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
+    return infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
 
 
 @pytest.fixture()
