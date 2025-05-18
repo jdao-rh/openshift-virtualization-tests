@@ -42,12 +42,6 @@ VM_EXPECTED_ANNOTATION_KEYS = [
     Template.VMAnnotations.WORKLOAD,
 ]
 
-CLUSTER_ARCH = infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
-SUFFIX = ""
-if CLUSTER_ARCH == "s390x":
-    SUFFIX = "-s390x"
-
-
 def fetch_osinfo_memory(osinfo_file_path, memory_test, resources_arch):
     """Fetch memory min and max values from the osinfo files."""
 
@@ -96,26 +90,31 @@ def check_default_and_validation_memory(get_base_templates, osinfo_memory_value,
         )
 
 
-def get_rhel_templates_list():
+def get_rhel_templates_list(cluster_arch="amd64"):
     rhel_major_releases_list = ["7", "8", "9"]
-    if CLUSTER_ARCH == "s390x":
+    template_suffix=""
+    if cluster_arch == "s390x":
         rhel_major_releases_list = ["8", "9"]
+        template_suffix=f"-{cluster_arch}"
     return [
-        f"rhel{release}-{workload}-{flavor}{SUFFIX}"
+        f"rhel{release}-{workload}-{flavor}{template_suffix}"
         for release in rhel_major_releases_list
         for flavor in LINUX_FLAVORS_LIST
         for workload in LINUX_WORKLOADS_LIST
     ]
 
 
-def get_fedora_templates_list():
+def get_fedora_templates_list(cluster_arch="amd64"):
+    template_suffix=""
+    if cluster_arch == "s390x":
+        template_suffix=f"-{cluster_arch}"
     return [
-        f"fedora-{workload}-{flavor}{SUFFIX}" for flavor in FEDORA_FLAVORS_LIST for workload in LINUX_WORKLOADS_LIST
+        f"fedora-{workload}-{flavor}{template_suffix}" for flavor in FEDORA_FLAVORS_LIST for workload in LINUX_WORKLOADS_LIST
     ]
 
 
-def get_windows_templates_list():
-    if CLUSTER_ARCH == "s390x":
+def get_windows_templates_list(cluster_arch="amd64"):
+    if cluster_arch == "s390x":
         return []
     windows10 = "windows10"
     windows11 = "windows11"
@@ -132,22 +131,29 @@ def get_windows_templates_list():
     return [f"{release}-{flavor}" for release in windows_workload_list for flavor in WINDOWS_FLAVOR_LIST]
 
 
-def get_centos_templates_list():
+def get_centos_templates_list(cluster_arch="amd64"):
+    template_suffix=""
+    if cluster_arch == "s390x":
+        template_suffix=f"-{cluster_arch}"
     centos_releases_list = ["-stream9"]
     return [
-        f"centos{release}-{workload}-{flavor}{SUFFIX}"
+        f"centos{release}-{workload}-{flavor}{template_suffix}"
         for release in centos_releases_list
         for flavor in LINUX_FLAVORS_LIST
         for workload in [Template.Workload.SERVER, Template.Workload.DESKTOP]
     ]
 
+def get_template_arch_suffix():
+    return  infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
+
 
 @pytest.fixture()
 def common_templates_expected_list():
-    common_templates_list = get_rhel_templates_list()
-    common_templates_list += get_fedora_templates_list()
-    common_templates_list += get_windows_templates_list()
-    common_templates_list += get_centos_templates_list()
+    node_cpu_arch = infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
+    common_templates_list = get_rhel_templates_list(node_cpu_arch)
+    common_templates_list += get_fedora_templates_list(node_cpu_arch)
+    common_templates_list += get_windows_templates_list(node_cpu_arch)
+    common_templates_list += get_centos_templates_list(node_cpu_arch)
     return common_templates_list
 
 
