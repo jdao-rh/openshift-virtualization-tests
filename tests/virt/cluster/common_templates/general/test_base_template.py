@@ -154,10 +154,10 @@ def get_template_arch_suffix():
 @pytest.fixture()
 def common_templates_expected_list():
     node_cpu_arch = infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
-    common_templates_list = get_rhel_templates_list(node_cpu_arch)
-    common_templates_list += get_fedora_templates_list(node_cpu_arch)
-    common_templates_list += get_windows_templates_list(node_cpu_arch)
-    common_templates_list += get_centos_templates_list(node_cpu_arch)
+    common_templates_list = get_rhel_templates_list(cluster_arch=node_cpu_arch)
+    common_templates_list += get_fedora_templates_list(cluster_arch=node_cpu_arch)
+    common_templates_list += get_windows_templates_list(cluster_arch=node_cpu_arch)
+    common_templates_list += get_centos_templates_list(cluster_arch=node_cpu_arch)
     return common_templates_list
 
 
