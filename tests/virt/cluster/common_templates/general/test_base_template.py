@@ -11,6 +11,7 @@ from xml.etree import ElementTree
 import bitmath
 import jsons
 import pytest
+from ocp_resources.resource import Resource
 from ocp_resources.node import Node
 from ocp_resources.resource import get_client
 from ocp_resources.template import Template
