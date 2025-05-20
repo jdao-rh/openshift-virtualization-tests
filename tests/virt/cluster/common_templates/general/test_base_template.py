@@ -96,6 +96,7 @@ def get_rhel_templates_list(cluster_arch=AMD_64):
     template_suffix = ""
     if cluster_arch == S390X:
         template_suffix = f"-{S390X}"
+        LOGGER.info("RHEL 7 not supported on s390x: removing RHEL 7 templates")
         rhel_major_releases_list = ["8", "9"]
     return [
         f"rhel{release}-{workload}-{flavor}{template_suffix}"
@@ -118,6 +119,7 @@ def get_fedora_templates_list(cluster_arch=AMD_64):
 
 def get_windows_templates_list(cluster_arch=AMD_64):
     if cluster_arch == "s390x":
+        LOGGER.info("Window is not suported on s390x architecture: removing Windows templates")
         return []
     windows10 = "windows10"
     windows11 = "windows11"
