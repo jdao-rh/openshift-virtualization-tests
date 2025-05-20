@@ -12,7 +12,7 @@ import bitmath
 import jsons
 import pytest
 from ocp_resources.node import Node
-from ocp_resources.resource import Resource, get_client
+from ocp_resources.resource import Resource
 from ocp_resources.template import Template
 from pytest_testconfig import config as py_config
 
@@ -151,7 +151,7 @@ def get_centos_templates_list(cluster_arch=AMD_64):
 
 @pytest.fixture()
 def common_templates_expected_list():
-    node_cpu_arch = infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
+    node_cpu_arch = infra.get_nodes_cpu_architecture()
     common_templates_list = get_rhel_templates_list(cluster_arch=node_cpu_arch)
     common_templates_list += get_fedora_templates_list(cluster_arch=node_cpu_arch)
     common_templates_list += get_windows_templates_list(cluster_arch=node_cpu_arch)
