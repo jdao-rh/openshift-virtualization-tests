@@ -147,10 +147,6 @@ def get_centos_templates_list(cluster_arch="amd64"):
     ]
 
 
-def get_template_arch_suffix():
-    return infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
-
-
 @pytest.fixture()
 def common_templates_expected_list():
     node_cpu_arch = infra.get_nodes_cpu_architecture(nodes=Node.get(dyn_client=get_client()))
