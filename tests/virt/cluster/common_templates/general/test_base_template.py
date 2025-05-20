@@ -118,7 +118,7 @@ def get_fedora_templates_list(cluster_arch=AMD_64):
 
 def get_windows_templates_list(cluster_arch=AMD_64):
     if cluster_arch == "s390x":
-        LOGGER.info("Window is not suported on s390x architecture: removing Windows templates")
+        LOGGER.info("Windows is not suported on s390x architecture: removing Windows templates")
         return []
     windows10 = "windows10"
     windows11 = "windows11"
