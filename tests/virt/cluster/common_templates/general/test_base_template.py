@@ -18,7 +18,7 @@ from pytest_testconfig import config as py_config
 from tests.os_params import FEDORA_LATEST_LABELS
 from tests.virt.cluster.common_templates.constants import HYPERV_FEATURES_LABELS_VM_YAML
 from utilities import infra
-from utilities.constants import AMD_64, DATA_SOURCE_NAME, DATA_SOURCE_NAMESPACE, S390X, Images
+from utilities.constants import DATA_SOURCE_NAME, DATA_SOURCE_NAMESPACE, S390X, Images
 
 pytestmark = [pytest.mark.post_upgrade, pytest.mark.sno]
 
@@ -90,7 +90,7 @@ def check_default_and_validation_memory(get_base_templates, osinfo_memory_value,
         )
 
 
-def get_rhel_templates_list(cluster_arch=AMD_64):
+def get_rhel_templates_list(cluster_arch):
     rhel_major_releases_list = ["7", "8", "9"]
     template_suffix = ""
     if cluster_arch == S390X:
@@ -105,7 +105,7 @@ def get_rhel_templates_list(cluster_arch=AMD_64):
     ]
 
 
-def get_fedora_templates_list(cluster_arch=AMD_64):
+def get_fedora_templates_list(cluster_arch):
     template_suffix = f"-{S390X}" if cluster_arch == S390X else ""
     return [
         f"fedora-{workload}-{flavor}{template_suffix}"
@@ -114,7 +114,7 @@ def get_fedora_templates_list(cluster_arch=AMD_64):
     ]
 
 
-def get_windows_templates_list(cluster_arch=AMD_64):
+def get_windows_templates_list(cluster_arch):
     if cluster_arch == "s390x":
         LOGGER.info("Windows is not suported on s390x architecture: removing Windows templates")
         return []
@@ -133,7 +133,7 @@ def get_windows_templates_list(cluster_arch=AMD_64):
     return [f"{release}-{flavor}" for release in windows_workload_list for flavor in WINDOWS_FLAVOR_LIST]
 
 
-def get_centos_templates_list(cluster_arch=AMD_64):
+def get_centos_templates_list(cluster_arch):
 template_suffix = f"-{S390X}" if cluster_arch == S390X else ""
     centos_releases_list = ["-stream9"]
     return [
