@@ -134,7 +134,7 @@ def get_windows_templates_list(cluster_arch):
 
 
 def get_centos_templates_list(cluster_arch):
-template_suffix = f"-{S390X}" if cluster_arch == S390X else ""
+    template_suffix = f"-{S390X}" if cluster_arch == S390X else ""
     centos_releases_list = ["-stream9"]
     return [
         f"centos{release}-{workload}-{flavor}{template_suffix}"
