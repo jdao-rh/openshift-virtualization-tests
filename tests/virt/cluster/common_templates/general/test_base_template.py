@@ -96,7 +96,7 @@ def get_rhel_templates_list(cluster_arch=AMD_64):
     if cluster_arch == S390X:
         template_suffix = f"-{S390X}"
         LOGGER.info("RHEL 7 not supported on s390x: removing RHEL 7 templates")
-        rhel_major_releases_list = ["8", "9"]
+        rhel_major_releases_list.remove("7")
     return [
         f"rhel{release}-{workload}-{flavor}{template_suffix}"
         for release in rhel_major_releases_list
