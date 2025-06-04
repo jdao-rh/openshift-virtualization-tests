@@ -13,7 +13,7 @@ from tests.virt.cluster.vm_cloning.utils import (
     assert_target_vm_has_new_pvc_disks,
     check_if_files_present_after_cloning,
 )
-from utilities.constants import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE, Images, S390X
+from utilities.constants import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE, S390X, Images
 from utilities.infra import get_artifactory_config_map, get_artifactory_secret, get_nodes_cpu_architecture
 from utilities.storage import (
     add_dv_to_vm,
