@@ -2503,7 +2503,9 @@ def rhel_vm_with_instancetype_and_preference_for_cloning(namespace, unprivileged
         namespace=namespace.name,
         client=unprivileged_client,
         vm_instance_type=VirtualMachineClusterInstancetype(name=U1_SMALL),
-        vm_preference=VirtualMachineClusterPreference(name=RHEL9_PREFERENCE_S390X if get_nodes_cpu_architecture() == S390X else RHEL9_PREFERENCE),
+        vm_preference=VirtualMachineClusterPreference(
+            name=RHEL9_PREFERENCE_S390X if get_nodes_cpu_architecture() == S390X else RHEL9_PREFERENCE
+        ),
         os_flavor=OS_FLAVOR_RHEL,
     ) as vm:
         running_vm(vm=vm)
