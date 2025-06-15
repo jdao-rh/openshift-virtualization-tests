@@ -76,10 +76,9 @@ def dv_template_for_vm_cloning(
 
 @pytest.fixture()
 def vm_with_dv_for_cloning(request, namespace, dv_template_for_vm_cloning, storage_class_for_snapshot):
-    cluster_arch = get_nodes_cpu_architecture()
     smm_enabled = True
     efi_params = {"secureBoot": True}
-    if cluster_arch == S390X:
+    if get_nodes_cpu_architecture() == S390X:
         smm_enabled = False
         efi_params = None
     with VirtualMachineForCloning(
