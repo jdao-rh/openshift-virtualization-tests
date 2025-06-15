@@ -16,6 +16,7 @@ from tests.virt.cluster.vm_cloning.utils import (
     check_if_files_present_after_cloning,
 )
 from utilities.constants import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE, Images
+
 from utilities.storage import (
     add_dv_to_vm,
     check_disk_count_in_vm,
@@ -61,7 +62,14 @@ def vm_with_dv_for_cloning(
     unprivileged_client,
     namespace,
     golden_image_data_volume_template_for_test_scope_function,
+    is_s390x_cluster,
 ):
+    if is_s390x_cluster:
+        smm_enabled = False
+        efi_params = None
+    else:
+        smm_enabled = True
+        efi_params = {"secureBoot": True}
     with VirtualMachineForCloning(
         name=request.param["vm_name"],
         namespace=namespace.name,
@@ -70,8 +78,8 @@ def vm_with_dv_for_cloning(
         memory_guest=request.param["memory_guest"],
         cpu_cores=request.param.get("cpu_cores", 1),
         os_flavor=request.param["vm_name"].split("-")[0],
-        smm_enabled=True,
-        efi_params={"secureBoot": True},
+        smm_enabled=smm_enabled,
+        efi_params=efi_params,
     ) as vm:
         # Add second DV when needed
         if request.param.get("extra_dv"):
@@ -161,6 +169,7 @@ def test_clone_vm_two_pvc_disks(
     ],
     indirect=True,
 )
+@pytest.mark.s390x
 @pytest.mark.polarion("CNV-10766")
 def test_clone_vm_with_instance_type_and_preference(
     rhel_vm_with_instancetype_and_preference_for_cloning,
@@ -227,6 +236,7 @@ def test_clone_windows_vm(
     indirect=True,
 )
 @pytest.mark.arm64
+@pytest.mark.s390x
 @pytest.mark.gating
 @pytest.mark.usefixtures(
     "fedora_vm_for_cloning",
