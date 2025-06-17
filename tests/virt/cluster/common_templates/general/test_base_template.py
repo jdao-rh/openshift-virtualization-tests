@@ -142,7 +142,7 @@ def get_centos_templates_list(cluster_arch):
 
 @pytest.fixture()
 def common_templates_expected_list(nodes):
-    node_cpu_arch = infra.get_nodes_cpu_architecture(nodes = nodes)
+    node_cpu_arch = infra.get_nodes_cpu_architecture(nodes=nodes)
     common_templates_list = get_rhel_templates_list(cluster_arch=node_cpu_arch)
     common_templates_list += get_fedora_templates_list(cluster_arch=node_cpu_arch)
     common_templates_list += get_windows_templates_list(cluster_arch=node_cpu_arch)
