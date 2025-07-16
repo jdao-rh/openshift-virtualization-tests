@@ -1,8 +1,8 @@
 import json
 import logging
+import os
 import re
 import shlex
-import os
 from datetime import datetime, timedelta, timezone
 
 import bitmath
@@ -17,10 +17,10 @@ from utilities.constants import (
     OS_FLAVOR_WINDOWS,
     S390X,
     S390X_TEMPLATE_SUFFIX,
-    X86_64,
     TCP_TIMEOUT_30SEC,
     TIMEOUT_15SEC,
     TIMEOUT_90SEC,
+    X86_64,
 )
 from utilities.infra import (
     get_linux_guest_agent_version,
@@ -623,8 +623,9 @@ def assert_windows_efi(vm):
     )[0]
     assert "\\EFI\\Microsoft\\Boot\\bootmgfw.efi" in out, f"EFI boot not found in path. bcdedit output:\n{out}"
 
+
 def get_template_arch_suffix():
     if os.environ.get("OPENSHIFT_VIRTUALIZATION_TEST_IMAGES_ARCH", X86_64) == S390X:
         return S390X_TEMPLATE_SUFFIX
     else:
-        return ''
+        return ""

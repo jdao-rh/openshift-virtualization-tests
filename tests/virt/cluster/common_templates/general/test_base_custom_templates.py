@@ -5,8 +5,8 @@ from kubernetes.dynamic.exceptions import UnprocessibleEntityError
 from ocp_resources.template import Template
 from pytest_testconfig import py_config
 
-from tests.virt.cluster.common_templates.utils import get_template_arch_suffix
 from tests.os_params import FEDORA_LATEST, FEDORA_LATEST_OS
+from tests.virt.cluster.common_templates.utils import get_template_arch_suffix
 from utilities.constants import NamespacesNames
 from utilities.virt import (
     VirtualMachineForTestsFromTemplate,
