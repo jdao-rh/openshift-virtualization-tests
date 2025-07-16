@@ -17,8 +17,9 @@ from pytest_testconfig import config as py_config
 
 from tests.os_params import FEDORA_LATEST_LABELS
 from tests.virt.cluster.common_templates.constants import HYPERV_FEATURES_LABELS_VM_YAML
+from tests.virt.cluster.common_templates.utils import get_template_arch_suffix
 from utilities import infra
-from utilities.constants import DATA_SOURCE_NAME, DATA_SOURCE_NAMESPACE, S390X, S390X_TEMPLATE_SUFFIX, Images
+from utilities.constants import DATA_SOURCE_NAME, DATA_SOURCE_NAMESPACE, S390X, Images
 
 pytestmark = [pytest.mark.post_upgrade, pytest.mark.sno]
 
@@ -96,7 +97,7 @@ def get_rhel_templates_list(cluster_arch):
         LOGGER.info("RHEL 7 not supported on s390x: removing RHEL 7 templates")
         rhel_major_releases_list.remove("7")
     return [
-        f"rhel{release}-{workload}-{flavor}{S390X_TEMPLATE_SUFFIX if cluster_arch == S390X else ''}"
+        f"rhel{release}-{workload}-{flavor}{get_template_arch_suffix()}"
         for release in rhel_major_releases_list
         for flavor in LINUX_FLAVORS_LIST
         for workload in LINUX_WORKLOADS_LIST
@@ -105,7 +106,7 @@ def get_rhel_templates_list(cluster_arch):
 
 def get_fedora_templates_list(cluster_arch):
     return [
-        f"fedora-{workload}-{flavor}{S390X_TEMPLATE_SUFFIX if cluster_arch == S390X else ''}"
+        f"fedora-{workload}-{flavor}{get_template_arch_suffix()}"
         for flavor in FEDORA_FLAVORS_LIST
         for workload in LINUX_WORKLOADS_LIST
     ]
@@ -133,7 +134,7 @@ def get_windows_templates_list(cluster_arch):
 def get_centos_templates_list(cluster_arch):
     centos_releases_list = ["-stream9"]
     return [
-        f"centos{release}-{workload}-{flavor}{S390X_TEMPLATE_SUFFIX if cluster_arch == S390X else ''}"
+        f"centos{release}-{workload}-{flavor}{get_template_arch_suffix()}"
         for release in centos_releases_list
         for flavor in LINUX_FLAVORS_LIST
         for workload in [Template.Workload.SERVER, Template.Workload.DESKTOP]
