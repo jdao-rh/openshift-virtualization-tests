@@ -97,8 +97,7 @@ class TestBaseCustomTemplates:
         [
             pytest.param(
                 {
-                    "base_template_name": 
-                        f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
                     "new_template_name": "fedora-custom-template-for-test",
                 },
                 "vm-from-custom-template",
@@ -106,8 +105,7 @@ class TestBaseCustomTemplates:
             ),
             pytest.param(
                 {
-                    "base_template_name": 
-                        f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
                     "new_template_name": "fedora-custom-template-disks-wildcard",
                     "validation_rule": {
                         "name": "volumes-validation",
@@ -145,8 +143,7 @@ class TestBaseCustomTemplates:
         [
             pytest.param(
                 {
-                    "base_template_name": 
-                        f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}{get_template_arch_suffix()}",
                     "new_template_name": "custom-fedora-template-core-validation",
                     "validation_rule": {
                         "name": "minimal-required-cpu-core",
