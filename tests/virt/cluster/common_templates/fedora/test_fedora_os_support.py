@@ -15,8 +15,9 @@ from tests.virt.cluster.common_templates.utils import (
     validate_user_info_virtctl_vs_linux_os,
     vm_os_version,
 )
+from utilities.architecture import get_cluster_architecture
 from utilities import console
-from utilities.constants import LINUX_STR
+from utilities.constants import LINUX_STR, S390X, X86_64
 from utilities.infra import validate_os_info_vmi_vs_linux_os
 from utilities.virt import (
     assert_linux_efi,
@@ -34,44 +35,49 @@ LOGGER = logging.getLogger(__name__)
 TESTS_CLASS_NAME = "TestCommonTemplatesFedora"
 
 
-HYPERV_DICT = {
-    "spec": {
-        "template": {
-            "spec": {
-                "domain": {
-                    "clock": {
-                        "utc": {},
-                        "timer": {
-                            "hpet": {"present": False},
-                            "pit": {"tickPolicy": "delay"},
-                            "rtc": {"tickPolicy": "catchup"},
-                            "hyperv": {},
+HYPERV_DICT_ARCH_CONFIG = {
+    X86_64: {
+        "spec": {
+            "template": {
+                "spec": {
+                    "domain": {
+                        "clock": {
+                            "utc": {},
+                            "timer": {
+                                "hpet": {"present": False},
+                                "pit": {"tickPolicy": "delay"},
+                                "rtc": {"tickPolicy": "catchup"},
+                                "hyperv": {},
+                            },
                         },
-                    },
-                    "features": {
-                        "acpi": {},
-                        "apic": {},
-                        "hyperv": {
-                            "relaxed": {},
-                            "vapic": {},
-                            "synictimer": {"direct": {}},
-                            "vpindex": {},
-                            "synic": {},
-                            "spinlocks": {"spinlocks": 8191},
-                            "frequencies": {},
-                            "ipi": {},
-                            "reenlightenment": {},
-                            "reset": {},
-                            "runtime": {},
-                            "tlbflush": {},
+                        "features": {
+                            "acpi": {},
+                            "apic": {},
+                            "hyperv": {
+                                "relaxed": {},
+                                "vapic": {},
+                                "synictimer": {"direct": {}},
+                                "vpindex": {},
+                                "synic": {},
+                                "spinlocks": {"spinlocks": 8191},
+                                "frequencies": {},
+                                "ipi": {},
+                                "reenlightenment": {},
+                                "reset": {},
+                                "runtime": {},
+                                "tlbflush": {},
+                            },
                         },
-                    },
+                    }
                 }
             }
         }
-    }
+    },
+    # remove hyperv config for s390x
+    S390X: {"spec": {}},
 }
 
+HYPERV_DICT=HYPERV_DICT_ARCH_CONFIG.get(get_cluster_architecture(), {})
 
 @pytest.mark.parametrize(
     "matrix_fedora_os_vm_from_template",
@@ -80,6 +86,7 @@ HYPERV_DICT = {
 )
 @pytest.mark.usefixtures("cluster_cpu_model_scope_class")
 class TestCommonTemplatesFedora:
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
@@ -91,6 +98,7 @@ class TestCommonTemplatesFedora:
         LOGGER.info("Create VM from template.")
         matrix_fedora_os_vm_from_template.create(wait=True)
 
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
@@ -109,6 +117,7 @@ class TestCommonTemplatesFedora:
         check_vm_xml_hyperv(vm=matrix_fedora_os_vm_from_template)
         check_vm_xml_clock(vm=matrix_fedora_os_vm_from_template)
 
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
@@ -121,6 +130,7 @@ class TestCommonTemplatesFedora:
         wait_for_console(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::start_vm"])
     @pytest.mark.polarion("CNV-3348")
     def test_os_version(self, matrix_fedora_os_vm_from_template):
@@ -136,6 +146,7 @@ class TestCommonTemplatesFedora:
         assert_linux_efi(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::create_vm"])
     @pytest.mark.polarion("CNV-3347")
     def test_domain_label(self, matrix_fedora_os_vm_from_template):
@@ -145,6 +156,7 @@ class TestCommonTemplatesFedora:
         assert domain_label == vm.name, f"Wrong domain label: {domain_label}"
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
     @pytest.mark.dependency(name=f"{TESTS_CLASS_NAME}::vm_expose_ssh", depends=[f"{TESTS_CLASS_NAME}::start_vm"])
@@ -157,6 +169,7 @@ class TestCommonTemplatesFedora:
         ), "Failed to login via SSH"
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(
         name=f"{TESTS_CLASS_NAME}::vmi_guest_agent_info", depends=[f"{TESTS_CLASS_NAME}::vm_expose_ssh"]
     )
@@ -166,30 +179,35 @@ class TestCommonTemplatesFedora:
         validate_os_info_vmi_vs_linux_os(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::vm_expose_ssh"])
     @pytest.mark.polarion("CNV-3573")
     def test_virtctl_guest_agent_os_info(self, matrix_fedora_os_vm_from_template):
         validate_os_info_virtctl_vs_linux_os(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::vm_expose_ssh"])
     @pytest.mark.polarion("CNV-3574")
     def test_virtctl_guest_agent_fs_info(self, matrix_fedora_os_vm_from_template):
         validate_fs_info_virtctl_vs_linux_os(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.sno
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::vm_expose_ssh"])
     @pytest.mark.polarion("CNV-4549")
     def test_virtctl_guest_agent_user_info(self, matrix_fedora_os_vm_from_template):
         with console.Console(vm=matrix_fedora_os_vm_from_template):
             validate_user_info_virtctl_vs_linux_os(vm=matrix_fedora_os_vm_from_template)
 
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::start_vm"])
     @pytest.mark.polarion("CNV-3668")
     def test_vm_machine_type(self, matrix_fedora_os_vm_from_template):
         check_machine_type(vm=matrix_fedora_os_vm_from_template)
 
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::start_vm"])
     @pytest.mark.polarion("CNV-5917")
@@ -197,6 +215,7 @@ class TestCommonTemplatesFedora:
         validate_pause_optional_migrate_unpause_linux_vm(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.rwx_default_storage
+    @pytest.mark.s390x
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
     @pytest.mark.polarion("CNV-5842")
@@ -209,12 +228,14 @@ class TestCommonTemplatesFedora:
         validate_libvirt_persistent_domain(vm=matrix_fedora_os_vm_from_template)
 
     @pytest.mark.polarion("CNV-5901")
+    @pytest.mark.s390x
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::migrate_vm_and_verify"])
     def test_pause_unpause_after_migrate(self, matrix_fedora_os_vm_from_template, ping_process_in_fedora_os):
         validate_pause_optional_migrate_unpause_linux_vm(
             vm=matrix_fedora_os_vm_from_template, pre_pause_pid=ping_process_in_fedora_os
         )
 
+    @pytest.mark.s390x
     @pytest.mark.polarion("CNV-6006")
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::migrate_vm_and_verify"])
     def test_verify_virtctl_guest_agent_data_after_migrate(self, matrix_fedora_os_vm_from_template):
@@ -222,11 +243,13 @@ class TestCommonTemplatesFedora:
             "Guest agent stopped responding"
         )
 
+    @pytest.mark.s390x
     @pytest.mark.polarion("CNV-12219")
     @pytest.mark.dependency(depends=[f"{TESTS_CLASS_NAME}::vmi_guest_agent_info"])
     def test_vmi_guest_agent_info_after_guest_reboot(self, matrix_fedora_os_vm_from_template):
         validate_virtctl_guest_agent_after_guest_reboot(vm=matrix_fedora_os_vm_from_template, os_type=LINUX_STR)
 
+    @pytest.mark.s390x
     @pytest.mark.sno
     @pytest.mark.ibm_bare_metal
     @pytest.mark.ocp_interop
