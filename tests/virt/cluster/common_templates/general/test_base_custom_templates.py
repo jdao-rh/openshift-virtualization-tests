@@ -85,6 +85,7 @@ def custom_template_from_base_template(request, admin_client, unprivileged_clien
     [pytest.param({"os_dict": FEDORA_LATEST})],
     indirect=True,
 )
+
 class TestBaseCustomTemplates:
     @pytest.mark.parametrize(
         "custom_template_from_base_template, vm_name",
