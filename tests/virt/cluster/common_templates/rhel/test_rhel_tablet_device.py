@@ -126,7 +126,6 @@ class TestRHELTabletDevice:
         migrate_vm_and_verify(vm=tablet_device_vm, check_ssh_connectivity=True)
 
 
-@pytest.mark.s390x
 @pytest.mark.parametrize(
     "golden_image_data_volume_multi_storage_scope_class",
     [

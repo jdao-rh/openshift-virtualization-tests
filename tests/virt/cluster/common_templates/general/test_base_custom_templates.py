@@ -90,13 +90,14 @@ def custom_template_from_base_template(request, namespace):
     ],
     indirect=True,
 )
+@pytest.mark.s390x
 class TestBaseCustomTemplates:
     @pytest.mark.parametrize(
         "custom_template_from_base_template, vm_name",
         [
             pytest.param(
                 {
-                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}-s390x",
                     "new_template_name": "fedora-custom-template-for-test",
                 },
                 "vm-from-custom-template",
@@ -104,7 +105,7 @@ class TestBaseCustomTemplates:
             ),
             pytest.param(
                 {
-                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}-s390x",
                     "new_template_name": "fedora-custom-template-disks-wildcard",
                     "validation_rule": {
                         "name": "volumes-validation",
@@ -142,7 +143,7 @@ class TestBaseCustomTemplates:
         [
             pytest.param(
                 {
-                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}",
+                    "base_template_name": f"fedora-{Template.Workload.DESKTOP}-{Template.Flavor.SMALL}-s390x",
                     "new_template_name": "custom-fedora-template-core-validation",
                     "validation_rule": {
                         "name": "minimal-required-cpu-core",

@@ -90,9 +90,9 @@ def check_default_and_validation_memory(get_base_templates, osinfo_memory_value,
 
 
 def get_rhel_templates_list():
-    rhel_major_releases_list = ["7", "8", "9"]
+    rhel_major_releases_list = ["9"]
     return [
-        f"rhel{release}-{workload}-{flavor}"
+        f"rhel{release}-{workload}-{flavor}-'s390x'"
         for release in rhel_major_releases_list
         for flavor in LINUX_FLAVORS_LIST
         for workload in LINUX_WORKLOADS_LIST
@@ -100,7 +100,7 @@ def get_rhel_templates_list():
 
 
 def get_fedora_templates_list():
-    return [f"fedora-{workload}-{flavor}" for flavor in FEDORA_FLAVORS_LIST for workload in LINUX_WORKLOADS_LIST]
+    return [f"fedora-{workload}-{flavor}-'s390x'" for flavor in FEDORA_FLAVORS_LIST for workload in LINUX_WORKLOADS_LIST]
 
 
 def get_windows_templates_list():
