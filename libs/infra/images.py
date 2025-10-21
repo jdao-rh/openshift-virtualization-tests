@@ -17,6 +17,15 @@ class Cirros:
     DIR: str = f"{BASE_IMAGES_DIR}/cirros-images"
     DEFAULT_DV_SIZE: str = "1Gi"
     DEFAULT_MEMORY_SIZE: str = "64M"
+    OS_FLAVOR: str = "cirros"
+
+
+@dataclass
+class Alpine:
+    QCOW2_IMG: str | None = None
+    DIR: str = f"{BASE_IMAGES_DIR}/alpine-images"
+    DEFAULT_DV_SIZE: str = "1Gi"
+    DEFAULT_MEMORY_SIZE: str = "128M"
 
 
 @dataclass

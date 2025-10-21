@@ -32,7 +32,6 @@ from utilities.constants import (
     CDI_LABEL,
     HOTPLUG_DISK_SERIAL,
     HPP_POOL,
-    OS_FLAVOR_CIRROS,
     OS_FLAVOR_WINDOWS,
     POD_CONTAINER_SPEC,
     TIMEOUT_1MIN,
@@ -981,30 +980,13 @@ def get_storage_class_with_specified_volume_mode(volume_mode, sc_names):
     LOGGER.error(f"No {sc_with_volume_mode} among {sc_names}")
 
 
-def wait_for_dv_expected_restart_count(dv, expected_result):
-    try:
-        for sample in TimeoutSampler(
-            wait_timeout=TIMEOUT_3MIN,
-            sleep=TIMEOUT_20SEC,
-            func=lambda: dv.instance.get("status", {}).get("restartCount"),
-        ):
-            if sample and sample >= expected_result:
-                return
-    except TimeoutExpiredError:
-        LOGGER.error(
-            f"error while restarting dv: {dv.name} ,expected restartCount: {expected_result}, "
-            f"actual restartCount: {sample}"
-        )
-        raise
-
-
 @contextmanager
 def create_vm_from_dv(
     dv,
     vm_name="cirros-vm",
     image=None,
     start=True,
-    os_flavor=OS_FLAVOR_CIRROS,
+    os_flavor=Images.Cirros.OS_FLAVOR,
     node_selector=None,
     cpu_model=None,
     memory_guest=Images.Cirros.DEFAULT_MEMORY_SIZE,

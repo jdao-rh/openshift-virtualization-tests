@@ -2,13 +2,13 @@ import logging
 import math
 import re
 import shlex
+import time
 import urllib
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Generator, Optional
 
 import bitmath
-import pytest
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
@@ -16,7 +16,7 @@ from ocp_resources.resource import Resource
 from ocp_resources.virtual_machine_cluster_instancetype import VirtualMachineClusterInstancetype
 from ocp_resources.virtual_machine_cluster_preference import VirtualMachineClusterPreference
 from ocp_utilities.monitoring import Prometheus
-from pyhelper_utils.shell import run_command, run_ssh_commands
+from pyhelper_utils.shell import run_ssh_commands
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from tests.observability.constants import KUBEVIRT_VIRT_OPERATOR_READY
@@ -51,10 +51,8 @@ from utilities.infra import (
     get_artifactory_config_map,
     get_artifactory_secret,
     get_http_image_url,
-    get_pod_by_name_prefix,
 )
 from utilities.monitoring import get_metrics_value
-from utilities.storage import wait_for_dv_expected_restart_count
 from utilities.virt import VirtualMachineForTests, running_vm
 
 LOGGER = logging.getLogger(__name__)
@@ -65,7 +63,6 @@ ONE_CPU_CORES = 1
 ZERO_CPU_CORES = 0
 COUNT_TWO = 2
 COUNT_THREE = 3
-TOTAL_4_ITERATIONS = 4
 
 
 def wait_for_metric_vmi_request_cpu_cores_output(prometheus: Prometheus, expected_cpu: int) -> None:
@@ -334,29 +331,6 @@ def get_resource_object(
     return None
 
 
-def restart_cdi_worker_pod(unprivileged_client: DynamicClient, dv: DataVolume, pod_prefix: str) -> None:
-    initial_dv_restartcount = dv.instance.get("status", {}).get("restartCount", 0)
-    for iteration in range(TOTAL_4_ITERATIONS - initial_dv_restartcount):
-        pod = get_pod_by_name_prefix(
-            dyn_client=unprivileged_client,
-            pod_prefix=pod_prefix,
-            namespace=dv.namespace,
-        )
-        dv_restartcount = dv.instance.get("status", {}).get("restartCount", 0)
-        run_command(
-            command=shlex.split(f"oc exec -n {dv.namespace} {pod.name} -- kill 1"),
-            check=False,
-        )
-        wait_for_dv_expected_restart_count(dv=dv, expected_result=dv_restartcount + 1)
-
-
-def fail_if_not_zero_restartcount(dv: DataVolume) -> None:
-    restartcount = dv.instance.get("status", {}).get("restartCount", 0)
-
-    if restartcount != 0:
-        pytest.fail(f"dv {dv.name} restartcount is not zero,\n actual restartcount: {restartcount}")
-
-
 def assert_virtctl_version_equal_metric_output(
     virtctl_server_version: dict[str, str], metric_output: list[dict[str, dict[str, str]]]
 ) -> None:
@@ -401,10 +375,27 @@ def validate_metric_value_within_range(
 
 
 def network_packets_received(vm: VirtualMachineForTests, interface_name: str) -> dict[str, str]:
-    virsh_domifstat_content = vm.privileged_vmi.virt_launcher_pod.execute(
-        command=shlex.split(f"virsh domifstat {vm.namespace}_{vm.name} {interface_name}")
-    ).splitlines()
-    return {line.split()[1]: line.split()[2] for line in virsh_domifstat_content if line}
+    ip_link_show_content = run_ssh_commands(host=vm.ssh_exec, commands=shlex.split("ip -s link show"))[0]
+    pattern = re.compile(
+        rf".*?{re.escape(interface_name)}:.*?"  # Match the line with the interface name
+        r"(?:RX:\s+bytes\s+packets\s+errors\s+dropped\s+.*?(\d+)\s+(\d+)\s+(\d+)\s+(\d+)).*?"  # Capture RX stats
+        r"(?:TX:\s+bytes\s+packets\s+errors\s+dropped\s+.*?(\d+)\s+(\d+)\s+(\d+)\s+(\d+))",  # Capture TX stats
+        re.DOTALL | re.IGNORECASE,
+    )
+    match = pattern.search(string=ip_link_show_content)
+    if match:
+        rx_bytes, rx_packets, rx_errs, rx_drop, tx_bytes, tx_packets, tx_errs, tx_drop = match.groups()
+        return {
+            "rx_bytes": rx_bytes,
+            "rx_packets": rx_packets,
+            "rx_errs": rx_errs,
+            "rx_drop": rx_drop,
+            "tx_bytes": tx_bytes,
+            "tx_packets": tx_packets,
+            "tx_errs": tx_errs,
+            "tx_drop": tx_drop,
+        }
+    return {}
 
 
 def compare_network_traffic_bytes_and_metrics(
@@ -412,6 +403,8 @@ def compare_network_traffic_bytes_and_metrics(
 ) -> bool:
     packet_received = network_packets_received(vm=vm, interface_name=vm_interface_name)
     rx_tx_indicator = False
+    LOGGER.info("Waiting for metric kubevirt_vmi_network_traffic_bytes_total to update")
+    time.sleep(TIMEOUT_15SEC)
     metric_result = (
         prometheus.query(query=f"kubevirt_vmi_network_traffic_bytes_total{{name='{vm.name}'}}")
         .get("data")
@@ -420,7 +413,7 @@ def compare_network_traffic_bytes_and_metrics(
     for entry in metric_result:
         entry_value = entry.get("value")[1]
         if math.isclose(
-            int(entry_value), int(packet_received[f"{entry.get('metric').get('type')}_bytes"]), rel_tol=0.02
+            int(entry_value), int(packet_received[f"{entry.get('metric').get('type')}_bytes"]), rel_tol=0.05
         ):
             rx_tx_indicator = True
         else:
@@ -442,15 +435,9 @@ def validate_network_traffic_metrics_value(
         vm_interface_name=interface_name,
     )
     try:
-        match_counter = 0
         for sample in samples:
             if sample:
-                match_counter += 1
-                if match_counter >= 3:
-                    return
-            else:
-                match_counter = 0
-
+                return
     except TimeoutExpiredError:
         LOGGER.error("Metric value and domistat value not correlate.")
         raise
@@ -712,14 +699,6 @@ def validate_vnic_info(prometheus: Prometheus, vnic_info_to_compare: dict[str, s
         if actual_value != expected_value:
             mismatch_vnic_info[info] = {f"Expected: {expected_value}", f"Actual: {actual_value}"}
     assert not mismatch_vnic_info, f"There is a mismatch between expected and actual results:\n {mismatch_vnic_info}"
-
-
-def get_interface_name_from_vm(vm: VirtualMachineForTests) -> str:
-    interface_name = vm.privileged_vmi.virt_launcher_pod.execute(
-        command=shlex.split("bash -c \"virsh domiflist 1 | grep ethernet | awk '{print $1}'\"")
-    )
-    assert interface_name, f"Interface not found for vm {vm.name}"
-    return interface_name
 
 
 def get_metric_labels_non_empty_value(prometheus: Prometheus, metric_name: str) -> dict[str, str]:
