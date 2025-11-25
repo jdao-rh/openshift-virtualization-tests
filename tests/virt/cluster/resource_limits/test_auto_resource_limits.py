@@ -49,7 +49,7 @@ def hotplugged_vm_with_cpu_auto_limits(vm_auto_resource_limits, unprivileged_cli
         vm=vm_auto_resource_limits, client=unprivileged_client, sockets=CPU_SOCKET_HOTPLUG
     )
 
-
+@pytest.mark.s390x
 @pytest.mark.gating
 @pytest.mark.parametrize(
     "resource_quota_for_auto_resource_limits_test, vm_auto_resource_limits, expected_limits",
@@ -62,7 +62,7 @@ def hotplugged_vm_with_cpu_auto_limits(vm_auto_resource_limits, unprivileged_cli
                 "name": "vm-for-cpu-limit",
             },
             {"cpu": True, "memory": False},
-            marks=[pytest.mark.polarion("CNV-11216"), pytest.mark.s390x],
+            marks=pytest.mark.polarion("CNV-11216"),
             id="set_only_cpu",
         ),
         pytest.param(
