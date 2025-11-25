@@ -49,6 +49,7 @@ def hotplugged_vm_with_cpu_auto_limits(vm_auto_resource_limits, unprivileged_cli
         vm=vm_auto_resource_limits, client=unprivileged_client, sockets=CPU_SOCKET_HOTPLUG
     )
 
+
 @pytest.mark.s390x
 @pytest.mark.gating
 @pytest.mark.parametrize(
