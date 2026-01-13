@@ -18,6 +18,7 @@ from tests.virt.upgrade.utils import (
     wait_for_automatic_vm_migrations,
 )
 from tests.virt.utils import get_boot_time_for_multiple_vms
+from utilities.artifactory import get_test_artifact_server_url
 from utilities.constants import (
     ES_LIVE_MIGRATE_IF_POSSIBLE,
     OS_FLAVOR_RHEL,
@@ -29,7 +30,6 @@ from utilities.storage import (
     create_dv,
     data_volume_template_with_source_ref_dict,
     generate_data_source_dict,
-    get_test_artifact_server_url,
 )
 from utilities.virt import (
     VirtualMachineForTests,
@@ -90,10 +90,10 @@ def vms_for_upgrade(
                 vms_list.append(vm)
                 vm.start(timeout=TIMEOUT_40MIN, wait=False)
 
-            for vm in vms_list:
-                running_vm(vm=vm, wait_for_cloud_init=True)
+        for vm in vms_list:
+            running_vm(vm=vm, wait_for_cloud_init=True)
 
-            yield vms_list
+        yield vms_list
 
     finally:
         for vm in vms_list:
@@ -101,19 +101,21 @@ def vms_for_upgrade(
 
 
 @pytest.fixture(scope="session")
-def vm_cluster_preference_for_upgrade():
+def vm_cluster_preference_for_upgrade(admin_client):
     with VirtualMachineClusterPreference(
         name="basic-cluster-preference-for-upgrade",
+        client=admin_client,
     ) as vm_cluster_preference:
         yield vm_cluster_preference
 
 
 @pytest.fixture(scope="session")
-def vm_cluster_instancetype_for_upgrade(cluster_common_node_cpu):
+def vm_cluster_instancetype_for_upgrade(admin_client, cluster_common_node_cpu):
     with VirtualMachineClusterInstancetype(
         name="basic-cluster-instancetype-for-upgrade",
         cpu={"guest": 1, "model": cluster_common_node_cpu},
         memory={"guest": Images.Rhel.DEFAULT_MEMORY_SIZE},
+        client=admin_client,
     ) as cluster_instance_type:
         yield cluster_instance_type
 
@@ -146,29 +148,9 @@ def vms_for_upgrade_dict_before(vms_for_upgrade):
     yield vms_dict
 
 
-@pytest.fixture(scope="session")
-def upgrade_namespaces(upgrade_namespace_scope_session, kmp_enabled_namespace):
-    return [kmp_enabled_namespace, upgrade_namespace_scope_session]
-
-
-@pytest.fixture(scope="session")
-def migratable_vms(admin_client, upgrade_namespaces):
-    migratable_vms = []
-    for ns in upgrade_namespaces:
-        for vm in list(VirtualMachine.get(client=admin_client, namespace=ns.name)):
-            if any(
-                condition.type == "LiveMigratable" and condition.status == "True"
-                for condition in vm.vmi.instance.status.conditions
-            ):
-                migratable_vms.append(vm)
-
-    LOGGER.info(f"All migratable vms: {[vm.name for vm in migratable_vms]}")
-    return migratable_vms
-
-
 @pytest.fixture()
 def unupdated_vmi_pods_names(admin_client, hco_namespace, hco_target_csv_name, eus_hco_target_csv_name, migratable_vms):
-    wait_for_automatic_vm_migrations(vm_list=migratable_vms)
+    wait_for_automatic_vm_migrations(vm_list=migratable_vms, admin_client=admin_client)
 
     return validate_vms_pod_updated(
         admin_client=admin_client,
@@ -272,7 +254,7 @@ def windows_vm(
                 data_source=ds,
                 cpu_model=modern_cpu_for_migration,
             ) as vm:
-                running_vm(vm=vm, check_ssh_connectivity=False)
+                running_vm(vm=vm)
                 yield vm
 
 

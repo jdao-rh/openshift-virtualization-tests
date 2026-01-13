@@ -1,3 +1,5 @@
+from typing import Any
+
 from kubernetes.dynamic.exceptions import InternalServerError
 from ocp_resources.aaq import AAQ
 from ocp_resources.api_service import APIService
@@ -433,6 +435,7 @@ KUBEVIRT_UI_CONFIG_READER_ROLE_BINDING = "kubevirt-ui-config-reader-rolebinding"
 HCO_BEARER_AUTH = "hco-bearer-auth"
 KUBEVIRT_CONSOLE_PLUGIN_NP = "kubevirt-console-plugin-np"
 KUBEVIRT_APISERVER_PROXY_NP = "kubevirt-apiserver-proxy-np"
+MIGCONTROLLER_KUBEVIRT_HYPERCONVERGED = "migcontroller-kubevirt-hyperconverged"
 # components kind
 ROLEBINDING_STR = "RoleBinding"
 POD_STR = "Pod"
@@ -458,6 +461,8 @@ KUBEVIRT_APISERVER_PROXY = "kubevirt-apiserver-proxy"
 NETWORKPOLICY_STR = "NetworkPolicy"
 AAQ_OPERATOR = "aaq-operator"
 WINDOWS_BOOTSOURCE_PIPELINE = "windows-bootsource-pipeline"
+KUBEVIRT_MIGRATION_OPERATOR = "kubevirt-migration-operator"
+KUBEVIRT_MIGRATION_CONTROLLER = "kubevirt-migration-controller"
 # All hco relate objects with kind
 ALL_HCO_RELATED_OBJECTS = [
     {KUBEVIRT_HYPERCONVERGED_PROMETHEUS_RULE: PROMETHEUSRULE_STR},
@@ -497,6 +502,7 @@ ALL_HCO_RELATED_OBJECTS = [
     {HCO_BEARER_AUTH: SECRET_STR},
     {KUBEVIRT_CONSOLE_PLUGIN_NP: NETWORKPOLICY_STR},
     {KUBEVIRT_APISERVER_PROXY_NP: NETWORKPOLICY_STR},
+    {MIGCONTROLLER_KUBEVIRT_HYPERCONVERGED: "MigController"},
 ]
 CNV_PODS_NO_HPP_CSI_HPP_POOL = [
     AAQ_OPERATOR,
@@ -514,6 +520,8 @@ CNV_PODS_NO_HPP_CSI_HPP_POOL = [
     KUBEMACPOOL_CERT_MANAGER,
     KUBEMACPOOL_MAC_CONTROLLER_MANAGER,
     KUBEVIRT_CONSOLE_PLUGIN,
+    KUBEVIRT_MIGRATION_OPERATOR,
+    KUBEVIRT_MIGRATION_CONTROLLER,
     SSP_OPERATOR,
     VIRT_API,
     VIRT_CONTROLLER,
@@ -524,8 +532,8 @@ CNV_PODS_NO_HPP_CSI_HPP_POOL = [
     KUBEVIRT_APISERVER_PROXY,
     KUBEVIRT_IPAM_CONTROLLER_MANAGER,
 ]
-ALL_CNV_PODS = CNV_PODS_NO_HPP_CSI_HPP_POOL + [HOSTPATH_PROVISIONER_CSI]
-ALL_CNV_DEPLOYMENTS_NO_HPP_POOL = [
+ALL_CNV_PODS = CNV_PODS_NO_HPP_CSI_HPP_POOL + [HOSTPATH_PROVISIONER_CSI, HPP_POOL]
+ALL_CNV_DEPLOYMENTS = [
     AAQ_OPERATOR,
     CDI_APISERVER,
     CDI_DEPLOYMENT,
@@ -547,14 +555,16 @@ ALL_CNV_DEPLOYMENTS_NO_HPP_POOL = [
     VIRT_EXPORTPROXY,
     KUBEVIRT_APISERVER_PROXY,
     KUBEVIRT_IPAM_CONTROLLER_MANAGER,
+    HPP_POOL,
+    KUBEVIRT_MIGRATION_OPERATOR,
+    KUBEVIRT_MIGRATION_CONTROLLER,
 ]
-ALL_CNV_DEPLOYMENTS = ALL_CNV_DEPLOYMENTS_NO_HPP_POOL + [HPP_POOL]
-ALL_CNV_DAEMONSETS_NO_HPP_CSI = [
+ALL_CNV_DAEMONSETS = [
     BRIDGE_MARKER,
+    HOSTPATH_PROVISIONER_CSI,
     KUBE_CNI_LINUX_BRIDGE_PLUGIN,
     VIRT_HANDLER,
 ]
-ALL_CNV_DAEMONSETS = [HOSTPATH_PROVISIONER_CSI] + ALL_CNV_DAEMONSETS_NO_HPP_CSI
 
 
 CNV_OPERATORS = [
@@ -563,6 +573,7 @@ CNV_OPERATORS = [
     CLUSTER_NETWORK_ADDONS_OPERATOR,
     HOSTPATH_PROVISIONER_OPERATOR,
     HYPERCONVERGED_CLUSTER_OPERATOR,
+    KUBEVIRT_MIGRATION_OPERATOR,
     "kubevirt-operator",
     SSP_OPERATOR,
     HYPERCONVERGED_CLUSTER_CLI_DOWNLOAD,
@@ -617,8 +628,7 @@ BASE_EXCEPTIONS_DICT: dict[type[Exception], list[str]] = {
 }
 
 # Container images
-NET_UTIL_CONTAINER_IMAGE = "quay.io/openshift-cnv/qe-cnv-tests-net-util-container:centos-stream-9"
-
+NET_UTIL_CONTAINER_IMAGE = "quay.io/openshift-cnv/qe-net-utils:latest"
 
 OC_ADM_LOGS_COMMAND = "oc adm node-logs"
 AUDIT_LOGS_PATH = "--path=kube-apiserver"
@@ -636,6 +646,7 @@ ALL_CNV_CRDS = [
     f"hostpathprovisioners.{Resource.ApiGroup.HOSTPATHPROVISIONER_KUBEVIRT_IO}",
     f"hyperconvergeds.{Resource.ApiGroup.HCO_KUBEVIRT_IO}",
     f"kubevirts.{Resource.ApiGroup.KUBEVIRT_IO}",
+    f"migcontrollers.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
     f"migrationpolicies.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
     f"networkaddonsconfigs.{Resource.ApiGroup.NETWORKADDONSOPERATOR_NETWORK_KUBEVIRT_IO}",
     f"objecttransfers.{Resource.ApiGroup.CDI_KUBEVIRT_IO}",
@@ -661,6 +672,10 @@ ALL_CNV_CRDS = [
     f"volumeclonesources.{Resource.ApiGroup.CDI_KUBEVIRT_IO}",
     f"openstackvolumepopulators.forklift.{Resource.ApiGroup.CDI_KUBEVIRT_IO}",
     f"ovirtvolumepopulators.forklift.{Resource.ApiGroup.CDI_KUBEVIRT_IO}",
+    f"multinamespacevirtualmachinestoragemigrationplans.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
+    f"multinamespacevirtualmachinestoragemigrations.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
+    f"virtualmachinestoragemigrationplans.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
+    f"virtualmachinestoragemigrations.{Resource.ApiGroup.MIGRATIONS_KUBEVIRT_IO}",
 ]
 PRODUCTION_CATALOG_SOURCE = "redhat-operators"
 TLS_OLD_POLICY = "old"
@@ -803,9 +818,7 @@ VM_CONSOLE_PROXY_NAMESPACE_RESOURCES = [
     RoleBinding,
 ]
 
-ARTIFACTORY_SECRET_NAME = "cnv-tests-artifactory-secret"
 CNV_TEST_RUN_IN_PROGRESS_NS = f"{CNV_TEST_RUN_IN_PROGRESS}-ns"
-BASE_ARTIFACTORY_LOCATION = "artifactory/cnv-qe-server-local"
 
 SECURITY_CONTEXT = "securityContext"
 
@@ -880,13 +893,30 @@ WIN_2K22 = "win2k22"
 WIN_2K16 = "win2k16"
 WIN_2K19 = "win2k19"
 
+HYPERV_FEATURES_LABELS_DOM_XML = [
+    "relaxed",
+    "vapic",
+    "spinlocks",
+    "vpindex",
+    "synic",
+    "stimer",  # synictimer in VM yaml
+    "frequencies",
+    "ipi",
+    "reset",
+    "runtime",
+    "tlbflush",
+    "reenlightenment",
+]
+HYPERV_FEATURES_LABELS_VM_YAML = HYPERV_FEATURES_LABELS_DOM_XML.copy()
+HYPERV_FEATURES_LABELS_VM_YAML[HYPERV_FEATURES_LABELS_VM_YAML.index("stimer")] = "synictimer"
+
 PUBLIC_DNS_SERVER_IP = "8.8.8.8"
 
 BIND_IMMEDIATE_ANNOTATION = {f"{Resource.ApiGroup.CDI_KUBEVIRT_IO}/storage.bind.immediate.requested": "true"}
 
 HCO_DEFAULT_CPU_MODEL_KEY = "defaultCPUModel"
 
-HPP_CAPABILITIES = {
+HPP_CAPABILITIES: dict[str, Any] = {
     VOLUME_MODE: DataVolume.VolumeMode.FILE,
     ACCESS_MODE: DataVolume.AccessMode.RWO,
     "snapshot": False,
@@ -985,3 +1015,12 @@ QUOTA_FOR_ONE_VMI = {
 }
 
 ARQ_QUOTA_HARD_SPEC = {**QUOTA_FOR_POD, **QUOTA_FOR_ONE_VMI}
+DEFAULT_FEDORA_REGISTRY_URL = "docker://quay.io/containerdisks/fedora:latest"
+REGISTRY_STR = "registry"
+STRESS_CPU_MEM_IO_COMMAND = (
+    "nohup stress-ng --vm {workers} --vm-bytes {memory} --vm-method all "
+    "--verify -t {timeout} -v --hdd 1 --io 1 --vm-keep &> /dev/null &"
+)
+
+# High performance & Numa related constants
+NODE_HUGE_PAGES_1GI_KEY = "hugepages-1Gi"

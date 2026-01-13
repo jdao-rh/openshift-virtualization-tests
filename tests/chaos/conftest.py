@@ -17,6 +17,7 @@ from tests.chaos.utils import (
     pod_deleting_process_recover,
     terminate_process,
 )
+from utilities.artifactory import get_artifactory_config_map, get_artifactory_secret
 from utilities.constants import (
     KUBEMACPOOL_MAC_CONTROLLER_MANAGER,
     OS_FLAVOR_RHEL,
@@ -34,8 +35,6 @@ from utilities.constants import (
 from utilities.infra import (
     ExecCommandOnPod,
     create_ns,
-    get_artifactory_config_map,
-    get_artifactory_secret,
     get_nodes_with_label,
     get_pod_by_name_prefix,
     get_utility_pods_from_nodes,
@@ -131,8 +130,9 @@ def chaos_vm_rhel9_with_dv_started(chaos_dv_rhel9, chaos_vm_rhel9_with_dv):
 
 
 @pytest.fixture()
-def downscaled_storage_provisioner_deployment(request):
+def downscaled_storage_provisioner_deployment(request, admin_client):
     deployment = Deployment(
+        client=admin_client,
         namespace=NamespacesNames.OPENSHIFT_STORAGE,
         name=request.param["storage_provisioner_deployment"],
     )
@@ -150,7 +150,7 @@ def kmp_manager_nodes(admin_client):
     yield [
         pod.node
         for pod in get_pod_by_name_prefix(
-            dyn_client=admin_client,
+            client=admin_client,
             pod_prefix=KUBEMACPOOL_MAC_CONTROLLER_MANAGER,
             namespace=py_config["hco_namespace"],
             get_all=True,
@@ -189,7 +189,7 @@ def pod_deleting_process(request, admin_client):
     pod_prefix = request.param["pod_prefix"]
     namespace_name = request.param["namespace_name"]
     process = create_pod_deleting_process(
-        dyn_client=admin_client,
+        client=admin_client,
         pod_prefix=pod_prefix,
         namespace_name=namespace_name,
         ratio=request.param["ratio"],
@@ -390,7 +390,7 @@ def deleted_pod_by_name_prefix(admin_client, cnv_pod_deletion_test_matrix__class
     pod_deletion_config = cnv_pod_deletion_test_matrix__class__[pod_matrix_key]
 
     deleted_pod_by_name_prefix = create_pod_deleting_process(
-        dyn_client=admin_client,
+        client=admin_client,
         pod_prefix=pod_deletion_config["pod_prefix"],
         namespace_name=pod_deletion_config["namespace_name"],
         ratio=pod_deletion_config["ratio"],
@@ -406,3 +406,14 @@ def deleted_pod_by_name_prefix(admin_client, cnv_pod_deletion_test_matrix__class
         namespace=pod_deletion_config["namespace_name"],
         pod_prefix=pod_deletion_config["pod_prefix"],
     )
+
+
+@pytest.fixture(scope="module")
+def multiprocessing_start_method_fork():
+    # Use fork context to avoid pickling issues with nested functions
+    # https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process
+    # https://github.com/python/cpython/issues/132898
+    original_start_method = multiprocessing.get_start_method()
+    multiprocessing.set_start_method("fork", force=True)
+    yield
+    multiprocessing.set_start_method(original_start_method, force=True)

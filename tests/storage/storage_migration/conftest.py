@@ -22,6 +22,7 @@ from tests.storage.storage_migration.constants import (
 )
 from tests.storage.storage_migration.utils import get_storage_class_for_storage_migration
 from tests.storage.utils import create_windows_directory
+from utilities.artifactory import get_http_image_url
 from utilities.constants import (
     OS_FLAVOR_FEDORA,
     OS_FLAVOR_RHEL,
@@ -33,7 +34,6 @@ from utilities.constants import (
     U1_SMALL,
     Images,
 )
-from utilities.infra import get_http_image_url
 from utilities.storage import (
     create_dv,
     data_volume_template_with_source_ref_dict,
@@ -291,7 +291,7 @@ def deleted_old_dvs_of_online_vms(unprivileged_client, online_vms_for_storage_cl
 
 @pytest.fixture(scope="class")
 def deleted_old_dvs_of_stopped_vms(unprivileged_client, namespace):
-    for dv in DataVolume.get(dyn_client=unprivileged_client, namespace=namespace.name):
+    for dv in DataVolume.get(client=unprivileged_client, namespace=namespace.name):
         # target DV after migration name is: <source-dv-name>-mig-<generated_suffix>
         if "-mig-" not in dv.name:
             assert dv.delete(wait=True)
@@ -426,6 +426,6 @@ def written_file_to_windows_vms_before_migration(booted_vms_for_storage_class_mi
 @pytest.fixture(scope="class")
 def cleaned_up_standalone_data_volume_after_storage_migration(unprivileged_client, namespace, data_volume_scope_class):
     yield
-    for dv in DataVolume.get(dyn_client=unprivileged_client, namespace=namespace.name):
+    for dv in DataVolume.get(client=unprivileged_client, namespace=namespace.name):
         if dv.name.startswith(f"{data_volume_scope_class.name}-mig"):
             assert dv.clean_up(wait=True)

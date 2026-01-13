@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 import requests
+from kubernetes.dynamic import DynamicClient
 from ocp_resources.cdi import CDI
 from ocp_resources.cluster_role import ClusterRole
 from ocp_resources.config_map import ConfigMap
@@ -24,6 +25,12 @@ from pyhelper_utils.shell import run_ssh_commands
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from utilities.artifactory import (
+    cleanup_artifactory_secret_and_config_map,
+    get_artifactory_config_map,
+    get_artifactory_secret,
+    get_http_image_url,
+)
 from utilities.constants import (
     CDI_UPLOADPROXY,
     TIMEOUT_2MIN,
@@ -32,17 +39,12 @@ from utilities.constants import (
 )
 from utilities.hco import ResourceEditorValidateHCOReconcile
 from utilities.infra import (
-    cleanup_artifactory_secret_and_config_map,
-    get_artifactory_config_map,
-    get_artifactory_secret,
-    get_http_image_url,
     get_pod_by_name_prefix,
 )
 from utilities.ssp import validate_os_info_vmi_vs_windows_os
 from utilities.storage import (
     PodWithPVC,
     create_dv,
-    create_vm_from_dv,
     get_containers_for_pods_with_pvc,
 )
 from utilities.virt import (
@@ -62,12 +64,14 @@ def import_image_to_dv(
     images_https_server_name,
     storage_ns_name,
     https_server_certificate,
+    client,
 ):
     url = get_file_url_https_server(images_https_server=images_https_server_name, file_name=Images.Cirros.QCOW2_IMG)
     with ConfigMap(
         name="https-cert-configmap",
         namespace=storage_ns_name,
         data={"tlsregistry.crt": https_server_certificate},
+        client=client,
     ) as configmap:
         with create_dv(
             source="http",
@@ -76,6 +80,7 @@ def import_image_to_dv(
             url=url,
             cert_configmap=configmap.name,
             storage_class=py_config["default_storage_class"],
+            client=client,
         ) as dv:
             yield dv
 
@@ -96,8 +101,8 @@ def upload_image_to_dv(dv_name, storage_ns_name, storage_class, client, consume_
 
 
 @contextmanager
-def upload_token_request(storage_ns_name, pvc_name, data):
-    with UploadTokenRequest(name="upload-image", namespace=storage_ns_name, pvc_name=pvc_name) as utr:
+def upload_token_request(storage_ns_name, pvc_name, data, client):
+    with UploadTokenRequest(name="upload-image", namespace=storage_ns_name, pvc_name=pvc_name, client=client) as utr:
         token = utr.create().status.token
         LOGGER.info("Ensure upload was successful")
         sampler = TimeoutSampler(
@@ -128,9 +133,9 @@ def create_windows_vm_validate_guest_agent_info(
         validate_os_info_vmi_vs_windows_os(vm=vm_dv)
 
 
-def upload_image(token, data, asynchronous=False):
+def upload_image(token, data, asynchronous=False, client=None):
     headers = {"Authorization": f"Bearer {token}"}
-    uploadproxy = Route(name=CDI_UPLOADPROXY, namespace=py_config["hco_namespace"])
+    uploadproxy = Route(name=CDI_UPLOADPROXY, namespace=py_config["hco_namespace"], client=client)
     uploadproxy_url = f"https://{uploadproxy.host}/v1alpha1/upload"
     if asynchronous:
         uploadproxy_url = f"{uploadproxy_url}-async"
@@ -166,12 +171,13 @@ def get_file_url_https_server(images_https_server, file_name):
 
 @contextmanager
 def create_cluster_role(
-    name: str, api_groups: list[str], verbs: list[str], permissions_to_resources: list[str]
+    client: DynamicClient, name: str, api_groups: list[str], verbs: list[str], permissions_to_resources: list[str]
 ) -> Generator:
     """
     Create cluster role
     """
     with ClusterRole(
+        client=client,
         name=name,
         rules=[
             {
@@ -186,6 +192,7 @@ def create_cluster_role(
 
 @contextmanager
 def create_role_binding(
+    client: DynamicClient,
     name: str,
     namespace: str,
     subjects_kind: str,
@@ -199,6 +206,7 @@ def create_role_binding(
     Create role binding
     """
     with RoleBinding(
+        client=client,
         name=name,
         namespace=namespace,
         subjects_kind=subjects_kind,
@@ -213,6 +221,7 @@ def create_role_binding(
 
 @contextmanager
 def set_permissions(
+    client: DynamicClient,
     role_name: str,
     role_api_groups: list[str],
     verbs: list[str],
@@ -225,12 +234,14 @@ def set_permissions(
     subjects_namespace: str | None = None,
 ) -> Generator:
     with create_cluster_role(
+        client=client,
         name=role_name,
         api_groups=role_api_groups,
         permissions_to_resources=permissions_to_resources,
         verbs=verbs,
     ) as cluster_role:
         with create_role_binding(
+            client=client,
             name=binding_name,
             namespace=namespace,
             subjects_kind=subjects_kind,
@@ -243,23 +254,8 @@ def set_permissions(
             yield
 
 
-def create_vm_and_verify_image_permission(dv: DataVolume) -> None:
-    with create_vm_from_dv(dv=dv) as vm:
-        running_vm(vm=vm, check_ssh_connectivity=False, wait_for_interfaces=False)
-        verify_vm_disk_image_permission(vm=vm)
-
-
-def verify_vm_disk_image_permission(vm: VirtualMachineForTests) -> None:
-    v_pod = vm.vmi.virt_launcher_pod
-    LOGGER.debug("Check image exist, permission and ownership")
-    output = v_pod.execute(command=["ls", "-l", "/var/run/kubevirt-private/vmi-disks/dv-disk"])
-    assert "disk.img" in output
-    assert "-rw-rw----." in output
-    assert "qemu qemu" in output
-
-
 def get_importer_pod(
-    dyn_client,
+    client,
     namespace,
 ):
     try:
@@ -267,7 +263,7 @@ def get_importer_pod(
             wait_timeout=30,
             sleep=1,
             func=get_pod_by_name_prefix,
-            dyn_client=dyn_client,
+            client=client,
             pod_prefix="importer",
             namespace=namespace,
         ):
@@ -284,12 +280,15 @@ def wait_for_importer_container_message(importer_pod, msg):
         sampled_msg = TimeoutSampler(
             wait_timeout=120,
             sleep=5,
-            func=lambda: importer_container_status_reason(importer_pod) == Pod.Status.CRASH_LOOPBACK_OFF
-            and msg
-            in importer_pod.instance.status.containerStatuses[0]
-            .get("lastState", {})
-            .get("terminated", {})
-            .get("message", ""),
+            func=lambda: (
+                importer_container_status_reason(importer_pod) == Pod.Status.CRASH_LOOPBACK_OFF
+                and msg
+                in importer_pod.instance.status
+                .containerStatuses[0]
+                .get("lastState", {})
+                .get("terminated", {})
+                .get("message", "")
+            ),
         )
         for sample in sampled_msg:
             if sample:
@@ -331,10 +330,11 @@ def is_hpp_cr_legacy(hostpath_provisioner):
     return not hostpath_provisioner.instance.spec.storagePools
 
 
-def get_hpp_daemonset(hco_namespace, hpp_cr_suffix):
+def get_hpp_daemonset(hco_namespace, hpp_cr_suffix, admin_client):
     daemonset = DaemonSet(
         name=f"{HostPathProvisioner.Name.HOSTPATH_PROVISIONER}{hpp_cr_suffix}",
         namespace=hco_namespace.name,
+        client=admin_client,
     )
     assert daemonset.exists, "hpp_daemonset does not exist"
     return daemonset
@@ -397,9 +397,9 @@ def create_cirros_dv(
     namespace,
     name,
     storage_class,
+    client,
     access_modes=None,
     volume_mode=None,
-    client=None,
     dv_size=Images.Cirros.DEFAULT_DV_SIZE,
 ):
     with create_dv(
@@ -434,6 +434,7 @@ def create_pod_for_pvc(pvc, volume_mode):
         name=f"{pvc.name}-pod",
         pvc_name=pvc.name,
         containers=get_containers_for_pods_with_pvc(volume_mode=volume_mode, pvc_name=pvc.name),
+        client=pvc.client,
     ) as pod:
         pod.wait_for_status(status=pod.Status.RUNNING)
         yield pod

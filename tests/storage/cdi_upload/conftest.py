@@ -3,18 +3,17 @@ CDI Import
 """
 
 import logging
+import uuid
 
 import pytest
 from ocp_resources.datavolume import DataVolume
 
-from utilities.constants import TIMEOUT_1MIN, Images
-from utilities.storage import (
-    check_upload_virtctl_result,
-    get_downloaded_artifact,
-    virtctl_upload_dv,
-)
+from utilities.constants import TIMEOUT_1MIN, TIMEOUT_2MIN, Images
+from utilities.storage import check_upload_virtctl_result, create_dv, get_downloaded_artifact, virtctl_upload_dv
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_DV_SIZE = Images.Cdi.DEFAULT_DV_SIZE
+LOCAL_PATH = f"/tmp/{Images.Cdi.QCOW2_IMG}"
 
 
 @pytest.fixture(scope="function")
@@ -43,12 +42,14 @@ def uploaded_dv_with_immediate_binding(
     namespace,
     storage_class_name_immediate_binding_scope_module,
     tmpdir,
+    unprivileged_client,
 ):
     image_file = request.param.get("image_file")
     dv_name = image_file.split(".")[0].replace("_", "-").lower()
     local_path = f"{tmpdir}/{image_file}"
     get_downloaded_artifact(remote_name=request.param.get("remote_name"), local_name=local_path)
     with virtctl_upload_dv(
+        client=namespace.client,
         namespace=namespace.name,
         name=dv_name,
         size=request.param.get("dv_size"),
@@ -57,8 +58,38 @@ def uploaded_dv_with_immediate_binding(
         insecure=True,
     ) as res:
         check_upload_virtctl_result(result=res)
-        dv = DataVolume(namespace=namespace.name, name=dv_name)
+        dv = DataVolume(namespace=namespace.name, name=dv_name, client=unprivileged_client)
         dv.wait_for_dv_success(timeout=TIMEOUT_1MIN)
         assert dv.pvc.bound(), f"PVC status is {dv.pvc.status}"
         yield dv
         dv.delete(wait=True)
+
+
+@pytest.fixture(scope="class")
+def uploaded_dv_scope_class(unprivileged_client, namespace, storage_class_name_scope_class):
+    dv_name = f"upload-existing-dv-{str(uuid.uuid4())[:8]}"
+    get_downloaded_artifact(
+        remote_name=f"{Images.Cdi.DIR}/{Images.Cdi.QCOW2_IMG}",
+        local_name=LOCAL_PATH,
+    )
+    with create_dv(
+        source="upload",
+        dv_name=dv_name,
+        namespace=namespace.name,
+        size=DEFAULT_DV_SIZE,
+        storage_class=storage_class_name_scope_class,
+        client=unprivileged_client,
+    ) as dv:
+        dv.wait_for_status(status=DataVolume.Status.UPLOAD_READY, timeout=TIMEOUT_2MIN)
+        with virtctl_upload_dv(
+            client=namespace.client,
+            namespace=namespace.name,
+            name=dv.name,
+            size=DEFAULT_DV_SIZE,
+            image_path=LOCAL_PATH,
+            insecure=True,
+            storage_class=storage_class_name_scope_class,
+            no_create=True,
+        ) as upload_result:
+            check_upload_virtctl_result(result=upload_result)
+            yield dv

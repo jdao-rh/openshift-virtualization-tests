@@ -109,15 +109,15 @@ def started_windows_vm_scope_class(
 @pytest.fixture(scope="class")
 def data_volume_multi_storage_scope_class(
     request,
+    unprivileged_client,
     namespace,
     storage_class_matrix__class__,
-    schedulable_nodes,
 ):
     yield from data_volume(
         request=request,
         namespace=namespace,
         storage_class_matrix=storage_class_matrix__class__,
-        schedulable_nodes=schedulable_nodes,
+        client=namespace.client,
     )
 
 
@@ -143,7 +143,7 @@ def param_substring_scope_class(storage_class_name_scope_class):
 
 
 @pytest.fixture(scope="class")
-def fedora_vm_for_hotplug_scope_class(namespace, param_substring_scope_class, cpu_for_migration):
+def fedora_vm_for_hotplug_scope_class(unprivileged_client, namespace, param_substring_scope_class, cpu_for_migration):
     name = f"fedora-hotplug-{param_substring_scope_class}"
     memory_requests = None
     cpu_requests = None
@@ -153,6 +153,7 @@ def fedora_vm_for_hotplug_scope_class(namespace, param_substring_scope_class, cp
         cpu_requests = 1
 
     with VirtualMachineForTests(
+        client=unprivileged_client,
         name=name,
         memory_requests=memory_requests,
         memory_limits=memory_requests,
@@ -167,13 +168,11 @@ def fedora_vm_for_hotplug_scope_class(namespace, param_substring_scope_class, cp
 
 
 @pytest.fixture(scope="class")
-def storage_class_name_scope_class(storage_class_matrix__class__):
-    return [*storage_class_matrix__class__][0]
-
-
-@pytest.fixture(scope="class")
-def blank_disk_dv_multi_storage_scope_class(namespace, param_substring_scope_class, storage_class_name_scope_class):
+def blank_disk_dv_multi_storage_scope_class(
+    unprivileged_client, namespace, param_substring_scope_class, storage_class_name_scope_class
+):
     with create_dv(
+        client=unprivileged_client,
         source="blank",
         dv_name=f"blank-dv-{param_substring_scope_class}",
         namespace=namespace.name,

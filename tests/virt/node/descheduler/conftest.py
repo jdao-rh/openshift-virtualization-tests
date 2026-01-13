@@ -8,6 +8,7 @@ from ocp_resources.resource import Resource, ResourceEditor
 from ocp_resources.virtual_machine_instance_migration import VirtualMachineInstanceMigration
 from ocp_utilities.infra import get_pods_by_name_prefix
 
+from tests.utils import start_stress_on_vm
 from tests.virt.node.descheduler.constants import (
     DESCHEDULER_LABEL_KEY,
     DESCHEDULER_LABEL_VALUE,
@@ -25,7 +26,6 @@ from tests.virt.utils import (
     build_node_affinity_dict,
     get_boot_time_for_multiple_vms,
     get_non_terminated_pods,
-    start_stress_on_vm,
 )
 from utilities.constants import TIMEOUT_5MIN, TIMEOUT_5SEC
 from utilities.infra import wait_for_pods_deletion
@@ -165,7 +165,7 @@ def drain_uncordon_node(
 @pytest.fixture()
 def all_existing_migrations_completed(admin_client, namespace):
     # Descheduler may trigger multiple migrations, need to wait when all succeeded
-    for migration in VirtualMachineInstanceMigration.get(dyn_client=admin_client, namespace=namespace):
+    for migration in VirtualMachineInstanceMigration.get(client=admin_client, namespace=namespace):
         wait_for_migration_finished(namespace=namespace.name, migration=migration, timeout=TIMEOUT_5MIN)
 
 
@@ -350,3 +350,14 @@ def nodes_taints_before_descheduler_test_run(nodes):
     for node in nodes_taints_before:
         if nodes_taints_after[node] != nodes_taints_before[node]:
             ResourceEditor(patches={node: {"spec": {"taints": nodes_taints_before[node]}}}).update()
+
+
+@pytest.fixture()
+def workers_psi_metric_values(prometheus, workers):
+    workers_names_list = [worker.name for worker in workers]
+    metric_output = prometheus.query_sampler(query="descheduler:combined_utilization_and_pressure:avg1m")
+    return {
+        item["metric"]["instance"]: float(item["value"][1]) * 100
+        for item in metric_output
+        if item["metric"]["instance"] in workers_names_list
+    }

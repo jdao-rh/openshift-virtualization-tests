@@ -11,11 +11,13 @@ from tests.infrastructure.golden_images.utils import (
     assert_missing_golden_image_pvc,
     assert_os_version_mismatch_in_vm,
 )
-from utilities.constants import OS_FLAVOR_FEDORA, RHEL9_STR, TIMEOUT_5MIN, TIMEOUT_5SEC, Images
-from utilities.infra import (
+from utilities.artifactory import (
     cleanup_artifactory_secret_and_config_map,
     get_artifactory_config_map,
     get_artifactory_secret,
+)
+from utilities.constants import OS_FLAVOR_FEDORA, RHEL9_STR, TIMEOUT_5MIN, TIMEOUT_5SEC, Images
+from utilities.infra import (
     validate_os_info_vmi_vs_linux_os,
 )
 from utilities.virt import VirtualMachineForTestsFromTemplate, running_vm
@@ -29,8 +31,9 @@ def boot_source_os_from_data_source_dict(auto_update_data_source_matrix__functio
 
 
 @pytest.fixture()
-def matrix_data_source(auto_update_data_source_matrix__function__, golden_images_namespace):
+def matrix_data_source(unprivileged_client, auto_update_data_source_matrix__function__, golden_images_namespace):
     return DataSource(
+        client=unprivileged_client,
         name=[*auto_update_data_source_matrix__function__][0],
         namespace=golden_images_namespace.name,
     )

@@ -378,18 +378,16 @@ class TestCollectDefaultCnvMustGatherWithVmGather:
     """Test cases for collect_default_cnv_must_gather_with_vm_gather function"""
 
     @patch("utilities.data_collector.utilities.hco.get_installed_hco_csv")
-    @patch("utilities.data_collector.get_client")
     @patch("utilities.data_collector.Namespace")
     @patch("utilities.data_collector.py_config", {"hco_namespace": "test-hco-ns"})
     @patch("utilities.data_collector.run_must_gather")
     @patch("utilities.data_collector.LOGGER")
     def test_collect_default_cnv_must_gather_with_vm_gather(
-        self, mock_logger, mock_run_must_gather, mock_namespace_class, mock_get_client, mock_get_csv
+        self, mock_logger, mock_run_must_gather, mock_namespace_class, mock_get_csv
     ):
         """Test collect_default_cnv_must_gather_with_vm_gather"""
         # Setup mocks
         mock_client = MagicMock()
-        mock_get_client.return_value = mock_client
 
         mock_namespace = MagicMock()
         mock_namespace_class.return_value = mock_namespace
@@ -409,9 +407,8 @@ class TestCollectDefaultCnvMustGatherWithVmGather:
         ]
         mock_get_csv.return_value = mock_csv
 
-        collect_default_cnv_must_gather_with_vm_gather(1800, "/target/dir")
+        collect_default_cnv_must_gather_with_vm_gather(1800, "/target/dir", admin_client=mock_client)
 
-        mock_get_client.assert_called_once()
         mock_namespace_class.assert_called_once_with(name="test-hco-ns")
         mock_get_csv.assert_called_once_with(admin_client=mock_client, hco_namespace=mock_namespace)
 
@@ -460,6 +457,31 @@ class TestPrepareDataDir:
 
         with pytest.raises(AssertionError, match="pytest.ini must include testpaths"):
             prepare_pytest_item_data_dir(mock_item, "/output")
+
+    @patch("os.makedirs")
+    @patch("os.path.split")
+    def test_prepare_pytest_item_data_dir_with_configvalue(self, mock_split, mock_makedirs):
+        """Test prepare_pytest_item_data_dir with pytest 9 ConfigValue object"""
+        mock_split.return_value = ("/some/path", "test_dir")
+
+        # Mock pytest 9's ConfigValue object
+        class ConfigValue:
+            def __init__(self, value):
+                self.value = value
+
+        # Mock pytest item
+        mock_item = MagicMock()
+        mock_item.cls.__name__ = "TestMyClass"
+        mock_item.name = "test_my_function"
+        mock_item.fspath.dirname = "/home/user/git/test-repo/tests/test_dir"
+        mock_item.fspath.basename = "test_something.py"
+        mock_item.session.config.inicfg.get.return_value = ConfigValue("tests")
+
+        result = prepare_pytest_item_data_dir(mock_item, "/output")
+
+        expected_path = "/output/test_dir/test_something/TestMyClass/test_my_function"
+        assert result == expected_path
+        mock_makedirs.assert_called_once_with(expected_path, exist_ok=True)
 
     @patch("os.makedirs")
     @patch("os.path.split")

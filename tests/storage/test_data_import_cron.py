@@ -18,6 +18,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from utilities.constants import (
     BIND_IMMEDIATE_ANNOTATION,
     OUTDATED,
+    QUARANTINED,
     TIMEOUT_1MIN,
     TIMEOUT_3MIN,
     TIMEOUT_5SEC,
@@ -50,8 +51,10 @@ def assert_first_imported_object_was_deleted(namespace, name):
     samples = TimeoutSampler(
         wait_timeout=TIMEOUT_3MIN,
         sleep=TIMEOUT_5SEC,
-        func=lambda: PersistentVolumeClaim(namespace=namespace, name=name).exists
-        or VolumeSnapshot(namespace=namespace, name=name).exists,
+        func=lambda: (
+            PersistentVolumeClaim(namespace=namespace, name=name).exists
+            or VolumeSnapshot(namespace=namespace, name=name).exists
+        ),
     )
     try:
         for sample in samples:
@@ -108,7 +111,7 @@ def rhel8_latest_image_truncated_sha_from_image_stream(namespace, rhel8_image_st
 
 
 @pytest.fixture()
-def data_import_cron_image_stream(namespace, storage_class_name_scope_function):
+def data_import_cron_image_stream(namespace, storage_class_name_scope_function, unprivileged_client):
     with DataImportCron(
         name=f"{RHEL8_STR}-image-import-cron",
         namespace=namespace.name,
@@ -131,6 +134,7 @@ def data_import_cron_image_stream(namespace, storage_class_name_scope_function):
                 },
             }
         },
+        client=unprivileged_client,
     ) as data_import_cron:
         yield data_import_cron
 
@@ -205,6 +209,11 @@ def second_object_cleanup(
     resource_class(namespace=namespace.name, name=second_object_name).clean_up()
 
 
+@pytest.mark.xfail(
+    reason=f"{QUARANTINED}: Volume snapshot fails to become ready during test setup. Tracked in CNV-75955",
+    run=False,
+)
+@pytest.mark.gating
 @pytest.mark.polarion("CNV-7602")
 @pytest.mark.s390x
 def test_data_import_cron_garbage_collection(

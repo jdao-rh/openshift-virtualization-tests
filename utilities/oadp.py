@@ -7,6 +7,12 @@ from ocp_resources.backup import Backup
 from ocp_resources.datavolume import DataVolume
 from ocp_resources.virtual_machine import VirtualMachine
 
+from utilities.artifactory import (
+    cleanup_artifactory_secret_and_config_map,
+    get_artifactory_config_map,
+    get_artifactory_secret,
+    get_http_image_url,
+)
 from utilities.constants import (
     ADP_NAMESPACE,
     OS_FLAVOR_RHEL,
@@ -14,10 +20,6 @@ from utilities.constants import (
     Images,
 )
 from utilities.infra import (
-    cleanup_artifactory_secret_and_config_map,
-    get_artifactory_config_map,
-    get_artifactory_secret,
-    get_http_image_url,
     get_pod_by_name_prefix,
     unique_name,
 )
@@ -27,7 +29,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def delete_velero_resource(resource, client):
-    velero_pod = get_pod_by_name_prefix(dyn_client=client, pod_prefix="velero", namespace=ADP_NAMESPACE)
+    velero_pod = get_pod_by_name_prefix(client=client, pod_prefix="velero", namespace=ADP_NAMESPACE)
     command = ["./velero", "delete", resource.kind.lower(), resource.name, "--confirm"]
     velero_pod.execute(command=command)
 

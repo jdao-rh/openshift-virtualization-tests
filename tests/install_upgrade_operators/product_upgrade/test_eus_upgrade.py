@@ -20,6 +20,7 @@ class TestEUSToEUSUpgrade:
         self,
         admin_client,
         hco_namespace,
+        migratable_vms,
         eus_target_cnv_version,
         eus_cnv_upgrade_path,
         eus_paused_worker_mcp,
@@ -35,7 +36,7 @@ class TestEUSToEUSUpgrade:
     ):
         LOGGER.info("Validate EUS to EUS upgrade process")
         verify_upgrade_cnv(
-            dyn_client=admin_client,
+            client=admin_client,
             hco_namespace=hco_namespace,
             expected_images=get_related_images_name_and_version(csv=eus_created_target_hco_csv).values(),
         )

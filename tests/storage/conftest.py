@@ -21,6 +21,12 @@ from ocp_resources.resource import ResourceEditor
 from ocp_resources.route import Route
 from ocp_resources.secret import Secret
 from ocp_resources.storage_class import StorageClass
+from ocp_resources.virtual_machine_cluster_instancetype import (
+    VirtualMachineClusterInstancetype,
+)
+from ocp_resources.virtual_machine_cluster_preference import (
+    VirtualMachineClusterPreference,
+)
 from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 from pytest_testconfig import config as py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
@@ -39,14 +45,18 @@ from tests.storage.utils import (
     is_hpp_cr_legacy,
 )
 from tests.utils import create_cirros_vm
+from utilities.artifactory import get_artifactory_config_map, get_artifactory_secret
 from utilities.constants import (
     CDI_OPERATOR,
     CDI_UPLOADPROXY,
     CNV_TEST_SERVICE_ACCOUNT,
     CNV_TESTS_CONTAINER,
+    OS_FLAVOR_RHEL,
+    RHEL10_PREFERENCE,
     SECURITY_CONTEXT,
     TIMEOUT_1MIN,
     TIMEOUT_5SEC,
+    U1_SMALL,
     Images,
 )
 from utilities.hco import (
@@ -56,16 +66,10 @@ from utilities.hco import (
 from utilities.infra import (
     INTERNAL_HTTP_SERVER_ADDRESS,
     ExecCommandOnPod,
-    get_artifactory_config_map,
-    get_artifactory_secret,
 )
 from utilities.jira import is_jira_open
-from utilities.storage import (
-    create_cirros_dv_for_snapshot_dict,
-    get_downloaded_artifact,
-    write_file,
-)
-from utilities.virt import VirtualMachineForTests
+from utilities.storage import data_volume_template_with_source_ref_dict, get_downloaded_artifact, write_file_via_ssh
+from utilities.virt import VirtualMachineForTests, running_vm
 
 LOGGER = logging.getLogger(__name__)
 LOCAL_PATH = f"/tmp/{Images.Cdi.QCOW2_IMG}"
@@ -109,12 +113,12 @@ INTERNAL_HTTP_TEMPLATE = {
 def hpp_resources(request, admin_client):
     rcs_object = request.param
     LOGGER.info(f"Get all resources with kind: {rcs_object.kind}")
-    resource_list = list(rcs_object.get(dyn_client=admin_client))
+    resource_list = list(rcs_object.get(client=admin_client))
     return [rcs for rcs in resource_list if rcs.name.startswith("hostpath-")]
 
 
 @pytest.fixture(scope="module")
-def internal_http_configmap(namespace, internal_http_service, workers_utility_pods, worker_node1):
+def internal_http_configmap(namespace, internal_http_service, workers_utility_pods, worker_node1, admin_client):
     svc_ip = internal_http_service.instance.to_dict()["spec"]["clusterIP"]
 
     def _fetch_cert():
@@ -139,6 +143,7 @@ def internal_http_configmap(namespace, internal_http_service, workers_utility_po
                     name=INTERNAL_HTTP_CONFIGMAP_NAME,
                     namespace=namespace.name,
                     data={"tlsregistry.crt": sample},
+                    client=admin_client,
                 ) as configmap:
                     yield configmap
                 break
@@ -149,18 +154,19 @@ def internal_http_configmap(namespace, internal_http_service, workers_utility_po
 
 
 @pytest.fixture(scope="module")
-def internal_http_secret(namespace):
+def internal_http_secret(namespace, admin_client):
     with Secret(
         name="internal-http-secret",
         namespace=namespace.name,
         accesskeyid="YWRtaW4=",
         secretkey="cGFzc3dvcmQ=",
+        client=admin_client,
     ) as secret:
         yield secret
 
 
 @pytest.fixture(scope="session")
-def internal_http_deployment(cnv_tests_utilities_namespace):
+def internal_http_deployment(cnv_tests_utilities_namespace, admin_client):
     """
     Deploy internal HTTP server Deployment into the cnv_tests_utilities_namespace namespace.
     This Deployment deploys a pod that runs an HTTP server
@@ -171,14 +177,17 @@ def internal_http_deployment(cnv_tests_utilities_namespace):
         selector=INTERNAL_HTTP_SELECTOR,
         template=INTERNAL_HTTP_TEMPLATE,
         replicas=1,
+        client=admin_client,
     ) as dep:
         dep.wait_for_replicas()
         yield dep
 
 
 @pytest.fixture(scope="session")
-def internal_http_service(cnv_tests_utilities_namespace, internal_http_deployment):
-    with HttpService(name=internal_http_deployment.name, namespace=cnv_tests_utilities_namespace.name) as svc:
+def internal_http_service(cnv_tests_utilities_namespace, internal_http_deployment, admin_client):
+    with HttpService(
+        name=internal_http_deployment.name, namespace=cnv_tests_utilities_namespace.name, client=admin_client
+    ) as svc:
         yield svc
 
 
@@ -193,7 +202,7 @@ def images_internal_http_server(internal_http_deployment, internal_http_service)
 
 @pytest.fixture()
 def upload_proxy_route(admin_client):
-    routes = Route.get(dyn_client=admin_client)
+    routes = Route.get(client=admin_client)
     upload_route = None
     for route in routes:
         if route.exposed_service == CDI_UPLOADPROXY:
@@ -271,12 +280,13 @@ def https_server_certificate():
 
 
 @pytest.fixture()
-def https_config_map(request, namespace, https_server_certificate):
+def https_config_map(request, namespace, https_server_certificate, admin_client):
     data = {"ca.pem": request.param["data"]} if hasattr(request, "param") else {"ca.pem": https_server_certificate}
     with ConfigMap(
         name=HTTPS_CONFIG_MAP_NAME,
         namespace=namespace.name,
         data=data,
+        client=admin_client,
     ) as configmap:
         yield configmap
 
@@ -329,7 +339,7 @@ def default_sc_as_fallback_for_scratch(unset_predefined_scratch_sc, admin_client
     if default_sc:
         yield default_sc
     else:
-        for sc in StorageClass.get(dyn_client=admin_client, name=py_config["default_storage_class"]):
+        for sc in StorageClass.get(client=admin_client, name=py_config["default_storage_class"]):
             assert sc, f"The cluster does not include {py_config['default_storage_class']} storage class"
             with ResourceEditor(
                 patches={
@@ -348,7 +358,7 @@ def default_sc_as_fallback_for_scratch(unset_predefined_scratch_sc, admin_client
 def router_cert_secret(admin_client):
     router_secret = "router-certs-default"
     for secret in Secret.get(
-        dyn_client=admin_client,
+        client=admin_client,
         name=router_secret,
         namespace="openshift-ingress",
     ):
@@ -404,17 +414,21 @@ def hpp_cr_suffix_scope_session(is_hpp_cr_legacy_scope_session):
 
 
 @pytest.fixture(scope="session")
-def hpp_daemonset_scope_session(hco_namespace, hpp_cr_suffix_scope_session):
-    yield get_hpp_daemonset(hco_namespace=hco_namespace, hpp_cr_suffix=hpp_cr_suffix_scope_session)
+def hpp_daemonset_scope_session(hco_namespace, hpp_cr_suffix_scope_session, admin_client):
+    yield get_hpp_daemonset(
+        hco_namespace=hco_namespace, hpp_cr_suffix=hpp_cr_suffix_scope_session, admin_client=admin_client
+    )
 
 
 @pytest.fixture(scope="module")
-def hpp_daemonset_scope_module(hco_namespace, hpp_cr_suffix_scope_module):
-    yield get_hpp_daemonset(hco_namespace=hco_namespace, hpp_cr_suffix=hpp_cr_suffix_scope_module)
+def hpp_daemonset_scope_module(hco_namespace, hpp_cr_suffix_scope_module, admin_client):
+    yield get_hpp_daemonset(
+        hco_namespace=hco_namespace, hpp_cr_suffix=hpp_cr_suffix_scope_module, admin_client=admin_client
+    )
 
 
 @pytest.fixture()
-def cirros_vm_name(request):
+def rhel_vm_name(request):
     return request.param["vm_name"]
 
 
@@ -445,53 +459,36 @@ def artifactory_config_map_scope_module(namespace):
 
 
 @pytest.fixture()
-def cirros_dv_for_snapshot_dict(
-    namespace,
-    cirros_vm_name,
-    storage_class_matrix_snapshot_matrix__module__,
-    artifactory_secret_scope_module,
-    artifactory_config_map_scope_module,
-):
-    yield create_cirros_dv_for_snapshot_dict(
-        name=cirros_vm_name,
-        namespace=namespace.name,
-        storage_class=[*storage_class_matrix_snapshot_matrix__module__][0],
-        artifactory_secret=artifactory_secret_scope_module,
-        artifactory_config_map=artifactory_config_map_scope_module,
-    )
-
-
-@pytest.fixture()
-def cirros_vm_for_snapshot(
+def rhel_vm_for_snapshot(
     admin_client,
     namespace,
-    cirros_vm_name,
-    cirros_dv_for_snapshot_dict,
+    rhel_vm_name,
+    rhel10_data_source_scope_session,
+    snapshot_storage_class_name_scope_module,
 ):
-    """
-    Create a VM with a DV that supports snapshots
-    """
-    dv_metadata = cirros_dv_for_snapshot_dict["metadata"]
+    """Create a RHEL VM with using DataSource that supports snapshots"""
     with VirtualMachineForTests(
+        name=rhel_vm_name,
+        namespace=namespace.name,
         client=admin_client,
-        name=cirros_vm_name,
-        namespace=dv_metadata["namespace"],
-        os_flavor=Images.Cirros.OS_FLAVOR,
-        memory_guest=Images.Cirros.DEFAULT_MEMORY_SIZE,
-        data_volume_template={
-            "metadata": dv_metadata,
-            "spec": cirros_dv_for_snapshot_dict["spec"],
-        },
+        os_flavor=OS_FLAVOR_RHEL,
+        vm_instance_type=VirtualMachineClusterInstancetype(client=admin_client, name=U1_SMALL),
+        vm_preference=VirtualMachineClusterPreference(client=admin_client, name=RHEL10_PREFERENCE),
+        data_volume_template=data_volume_template_with_source_ref_dict(
+            data_source=rhel10_data_source_scope_session,
+            storage_class=snapshot_storage_class_name_scope_module,
+        ),
     ) as vm:
+        running_vm(vm=vm)
         yield vm
 
 
 @pytest.fixture()
-def snapshots_with_content(
+def snapshot_with_content(
     request,
     namespace,
     admin_client,
-    cirros_vm_for_snapshot,
+    rhel_vm_for_snapshot,
 ):
     """
     Creates a requested number of snapshots with content
@@ -501,32 +498,26 @@ def snapshots_with_content(
     vm_snapshots = []
     is_online_test = request.param.get("online_vm", False)
     for idx in range(request.param["number_of_snapshots"]):
-        # write_file check if the vm is running and if not, start the vm
-        # after the file have been written the function stops the vm
         index = idx + 1
         before_snap_index = f"before-snap-{index}"
-        write_file(
-            vm=cirros_vm_for_snapshot,
-            filename=f"{before_snap_index}.txt",
-            content=before_snap_index,
-        )
-        if is_online_test:
-            cirros_vm_for_snapshot.start(wait=True)
+        running_vm(vm=rhel_vm_for_snapshot)
+        write_file_via_ssh(vm=rhel_vm_for_snapshot, filename=f"{before_snap_index}.txt", content=before_snap_index)
+        if not is_online_test:
+            rhel_vm_for_snapshot.stop(wait=True)
         with VirtualMachineSnapshot(
-            name=f"snapshot-{cirros_vm_for_snapshot.name}-number-{index}",
-            namespace=cirros_vm_for_snapshot.namespace,
-            vm_name=cirros_vm_for_snapshot.name,
+            name=f"snapshot-{rhel_vm_for_snapshot.name}-number-{index}",
+            namespace=rhel_vm_for_snapshot.namespace,
+            vm_name=rhel_vm_for_snapshot.name,
             client=admin_client,
             teardown=False,
         ) as vm_snapshot:
             vm_snapshots.append(vm_snapshot)
             vm_snapshot.wait_snapshot_done()
             after_snap_index = f"after-snap-{index}"
-            write_file(
-                vm=cirros_vm_for_snapshot,
-                filename=f"{after_snap_index}.txt",
-                content=after_snap_index,
-            )
+            running_vm(vm=rhel_vm_for_snapshot)
+            write_file_via_ssh(vm=rhel_vm_for_snapshot, filename=f"{after_snap_index}.txt", content=after_snap_index)
+            if not is_online_test:
+                rhel_vm_for_snapshot.stop(wait=True)
     check_snapshot_indication(snapshot=vm_snapshot, is_online=is_online_test)
     yield vm_snapshots
 
@@ -578,6 +569,11 @@ def storage_class_name_scope_module(storage_class_matrix__module__):
 @pytest.fixture(scope="module")
 def storage_class_name_immediate_binding_scope_module(storage_class_matrix_immediate_matrix__module__):
     return [*storage_class_matrix_immediate_matrix__module__][0]
+
+
+@pytest.fixture(scope="class")
+def storage_class_name_scope_class(storage_class_matrix__class__):
+    return [*storage_class_matrix__class__][0]
 
 
 @pytest.fixture(scope="session")

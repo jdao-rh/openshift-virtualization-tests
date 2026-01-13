@@ -3,17 +3,16 @@ from datetime import datetime, timezone
 
 import bitmath
 import pytest
-from ocp_resources.datavolume import DataVolume
 from ocp_resources.persistent_volume_claim import PersistentVolumeClaim
 from ocp_resources.virtual_machine import VirtualMachine
 from ocp_resources.virtual_machine_instance_migration import (
     VirtualMachineInstanceMigration,
 )
-from pytest_testconfig import py_config
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from tests.observability.metrics.constants import (
     KUBEVIRT_CONSOLE_ACTIVE_CONNECTIONS_BY_VMI,
+    KUBEVIRT_VM_CREATED_BY_POD_TOTAL,
     KUBEVIRT_VM_DISK_ALLOCATED_SIZE_BYTES,
     KUBEVIRT_VMI_PHASE_TRANSITION_TIME_FROM_DELETION_SECONDS_SUM_SUCCEEDED,
     KUBEVIRT_VNC_ACTIVE_CONNECTIONS_BY_VMI,
@@ -26,7 +25,7 @@ from tests.observability.metrics.utils import (
     validate_vnic_info,
 )
 from tests.observability.utils import validate_metrics_value
-from tests.os_params import FEDORA_LATEST_LABELS, RHEL_LATEST
+from tests.os_params import FEDORA_LATEST_LABELS
 from utilities.constants import (
     CAPACITY,
     LIVE_MIGRATE,
@@ -92,13 +91,14 @@ def vm_in_error_state(namespace):
 
 
 @pytest.fixture()
-def pvc_for_vm_in_starting_state(namespace):
+def pvc_for_vm_in_starting_state(unprivileged_client, namespace):
     with PersistentVolumeClaim(
         name="vm-in-starting-state-pvc",
         namespace=namespace.name,
         accessmodes=PersistentVolumeClaim.AccessMode.RWX,
         size="1Gi",
         pvlabel="non-existent-pv",
+        client=unprivileged_client,
     ) as pvc:
         yield pvc
 
@@ -133,11 +133,12 @@ def vm_metric_1(namespace, unprivileged_client, cluster_common_node_cpu):
 
 
 @pytest.fixture()
-def vm_metric_1_vmim(vm_metric_1):
+def vm_metric_1_vmim(admin_client, vm_metric_1):
     with VirtualMachineInstanceMigration(
         name="vm-metric-1-vmim",
         namespace=vm_metric_1.namespace,
         vmi_name=vm_metric_1.vmi.name,
+        client=admin_client,
     ) as vmim:
         vmim.wait_for_status(status=vmim.Status.RUNNING, timeout=TIMEOUT_3MIN)
         yield
@@ -372,16 +373,9 @@ class TestVmResourceLimits:
 
 class TestKubevirtVmiNonEvictable:
     @pytest.mark.parametrize(
-        "data_volume_scope_function, vm_from_template_with_existing_dv",
+        "vm_with_rwo_dv",
         [
             pytest.param(
-                {
-                    "dv_name": "non-evictable-dv",
-                    "image": RHEL_LATEST["image_path"],
-                    "storage_class": py_config["default_storage_class"],
-                    "dv_size": RHEL_LATEST["dv_size"],
-                    "access_modes": DataVolume.AccessMode.RWO,
-                },
                 {
                     "vm_name": "non-evictable-vm",
                     "template_labels": FEDORA_LATEST_LABELS,
@@ -398,8 +392,7 @@ class TestKubevirtVmiNonEvictable:
     def test_kubevirt_vmi_non_evictable(
         self,
         prometheus,
-        data_volume_scope_function,
-        vm_from_template_with_existing_dv,
+        vm_with_rwo_dv,
     ):
         validate_metrics_value(
             prometheus=prometheus,
@@ -508,4 +501,28 @@ class TestVmiPhaseTransitionFromDeletion:
             prometheus=prometheus,
             metric_name=KUBEVIRT_VMI_PHASE_TRANSITION_TIME_FROM_DELETION_SECONDS_SUM_SUCCEEDED,
             initial_value=initial_metric_value,
+        )
+
+
+class TestVmCreatedByPodTotal:
+    @pytest.mark.parametrize(
+        "vm_for_test",
+        [
+            pytest.param(
+                "vm-created-by-pod-total-vm",
+                marks=pytest.mark.polarion("CNV-12361"),
+            )
+        ],
+        indirect=True,
+    )
+    def test_kubevirt_vm_created_by_pod_total(
+        self,
+        prometheus,
+        vm_created_pod_total_initial_metric_value,
+        vm_for_test,
+    ):
+        validate_metrics_value(
+            prometheus=prometheus,
+            metric_name=KUBEVIRT_VM_CREATED_BY_POD_TOTAL.format(namespace=vm_for_test.namespace),
+            expected_value=str(vm_created_pod_total_initial_metric_value + 1),
         )

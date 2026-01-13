@@ -23,19 +23,19 @@ def skip_if_no_local_storage_class(local_storage_class):
 
 @pytest.fixture()
 def local_storage_pv_spec(request, admin_client):
-    for local_sc_pv in PersistentVolume.get(dyn_client=admin_client, label_selector=request.param["pv_label"]):
+    for local_sc_pv in PersistentVolume.get(client=admin_client, label_selector=request.param["pv_label"]):
         return local_sc_pv.instance.spec
 
 
 @pytest.fixture()
 def local_storage_class(request, admin_client):
-    for local_sc in StorageClass.get(dyn_client=admin_client, label_selector=request.param["sc_label"]):
+    for local_sc in StorageClass.get(client=admin_client, label_selector=request.param["sc_label"]):
         return local_sc
 
 
 @pytest.fixture()
-def local_storage_profile_claim_property_sets(local_storage_class):
-    return StorageProfile(name=local_storage_class.name).instance.status["claimPropertySets"][0]
+def local_storage_profile_claim_property_sets(local_storage_class, admin_client):
+    return StorageProfile(name=local_storage_class.name, client=admin_client).instance.status["claimPropertySets"][0]
 
 
 @pytest.mark.parametrize(

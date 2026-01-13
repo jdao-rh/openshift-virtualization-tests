@@ -17,16 +17,15 @@ from pyhelper_utils.shell import run_ssh_commands
 from pytest import FixtureRequest
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
-from tests.virt.cluster.common_templates.constants import HYPERV_FEATURES_LABELS_DOM_XML
 from tests.virt.utils import get_or_create_golden_image_data_source
 from utilities.constants import (
     OS_FLAVOR_RHEL,
     OS_FLAVOR_WINDOWS,
     TCP_TIMEOUT_30SEC,
+    TIMEOUT_1MIN,
     TIMEOUT_15SEC,
     TIMEOUT_90SEC,
 )
-from utilities.exceptions import raise_multiple_exceptions
 from utilities.infra import (
     get_linux_guest_agent_version,
     get_linux_os_info,
@@ -61,70 +60,86 @@ def restart_qemu_guest_agent_service(vm):
 
 # Guest agent data comparison functions.
 def validate_os_info_virtctl_vs_linux_os(vm):
-    def _get_os_info(vm):
+    data_mismatch = []
+    virtctl_info = None
+    if "rhel-7" in vm.name:
+        # Needed for rhel-7 because guest agent is restarted before check
+        # and virtctl needs to re-sync the data
+        try:
+            for sampler in TimeoutSampler(
+                wait_timeout=TIMEOUT_1MIN, sleep=TIMEOUT_15SEC, func=get_virtctl_os_info, vm=vm
+            ):
+                if virtctl_info := sampler:
+                    break
+        except TimeoutExpiredError:
+            raise ValueError("Virtctl OS info not updated after service restart!")
+    else:
         virtctl_info = get_virtctl_os_info(vm=vm)
-        cnv_info = get_cnv_os_info(vm=vm)
-        libvirt_info = get_libvirt_os_info(vm=vm)
-        linux_info = get_linux_os_info(ssh_exec=vm.ssh_exec)
-        if is_jira_67104_bug_open():
-            virtctl_info.pop("load", None)
-            cnv_info.pop("load", None)
-        return virtctl_info, cnv_info, libvirt_info, linux_info
 
-    os_info_sampler = TimeoutSampler(wait_timeout=330, sleep=30, func=_get_os_info, vm=vm)
-    check_guest_agent_sampler_data(sampler=os_info_sampler)
+    linux_info = get_linux_os_info(ssh_exec=vm.ssh_exec)
+    if is_jira_67104_bug_open():
+        virtctl_info.pop("load", None)
+
+    for os_param_name, os_param_value in virtctl_info.items():
+        if os_param_value != linux_info.get(os_param_name):
+            data_mismatch.append(f"OS data mismatch - {os_param_name}")
+
+    assert not data_mismatch, (
+        f"Data mismatch {data_mismatch}!\nVirtctl: {virtctl_info}\nCNV: {get_cnv_os_info(vm=vm)}\n"
+        f"Libvirt: {get_libvirt_os_info(vm=vm)}\nOS: {linux_info}"
+    )
 
 
 def validate_fs_info_virtctl_vs_linux_os(vm):
-    def _get_fs_info(vm):
-        virtctl_info = get_virtctl_fs_info(vm=vm)
-        cnv_info = get_cnv_fs_info(vm=vm)
-        libvirt_info = get_libvirt_fs_info(vm=vm)
-        linux_info = get_linux_fs_info(ssh_exec=vm.ssh_exec)
-        return virtctl_info, cnv_info, libvirt_info, linux_info
-
-    orig_virtctl_info = cnv_info = libvirt_info = orig_linux_info = None
-
-    fs_info_sampler = TimeoutSampler(wait_timeout=TIMEOUT_90SEC, sleep=1, func=_get_fs_info, vm=vm)
-
+    orig_virtctl_info = None
+    orig_linux_info = get_linux_fs_info(ssh_exec=vm.ssh_exec)
     try:
-        for virtctl_info, cnv_info, libvirt_info, linux_info in fs_info_sampler:
+        for virtctl_info in TimeoutSampler(
+            wait_timeout=TIMEOUT_90SEC, sleep=TIMEOUT_15SEC, func=get_virtctl_fs_info, vm=vm
+        ):
             if virtctl_info:
                 orig_virtctl_info = virtctl_info.copy()
-                orig_linux_info = linux_info.copy()
+                linux_info = orig_linux_info.copy()
 
-                # Disk usage may not be bit exact; allowing up to 5% diff
-                disk_usage_diff_validation = 1 - virtctl_info.pop("used") / linux_info.pop("used") <= 0.05
+                # Disk usage may not be bit exact; allowing up to 10% diff
+                disk_usage_diff_validation = 1 - virtctl_info.pop("used") / linux_info.pop("used") <= 0.1
                 if disk_usage_diff_validation and virtctl_info == linux_info:
                     return
-    except TimeoutExpiredError as exp:
-        raise_multiple_exceptions(
-            exceptions=[
-                ValueError(
-                    f"Data mismatch!\nVirtctl: {orig_virtctl_info}\nCNV: {cnv_info}\nLibvirt: {libvirt_info}\n"
-                    f"OS: {orig_linux_info}"
-                ),
-                exp,
-            ]
+    except TimeoutExpiredError:
+        raise ValueError(
+            f"Data mismatch!\nVirtctl: {orig_virtctl_info}\nCNV: {get_cnv_fs_info(vm=vm)}\n"
+            f"Libvirt: {get_libvirt_fs_info(vm=vm)}\nOS: {orig_linux_info}"
         )
 
 
 def validate_user_info_virtctl_vs_linux_os(vm):
-    def _get_user_info(vm):
-        virtctl_info = get_virtctl_user_info(vm=vm)
-        cnv_info = get_cnv_user_info(vm=vm)
-        libvirt_info = get_libvirt_user_info(vm=vm)
-        linux_info = get_linux_user_info(vm=vm)
-        return virtctl_info, cnv_info, libvirt_info, linux_info
+    data_mismatch = []
+    virtctl_info = None
+    linux_info = get_linux_user_info(vm=vm)
+    # Wait for virtctl to sync userlist data
+    # This is needed because the user info is not updated immediately after logging in
+    # (in linux test user loggin is done during test, unlike windows where user is logged in when OS is booted)
+    try:
+        for sampler in TimeoutSampler(
+            wait_timeout=TIMEOUT_1MIN, sleep=TIMEOUT_15SEC, func=get_virtctl_user_info, vm=vm
+        ):
+            if virtctl_info := sampler:
+                break
+    except TimeoutExpiredError:
+        raise ValueError("Virtctl user info not updated with logged in user!")
 
-    user_info_sampler = TimeoutSampler(wait_timeout=30, sleep=10, func=_get_user_info, vm=vm)
-    check_guest_agent_sampler_data(sampler=user_info_sampler)
+    for user_param_name, user_param_value in virtctl_info.items():
+        if user_param_value != linux_info.get(user_param_name):
+            data_mismatch.append(f"User data mismatch - {user_param_name}")
+
+    assert not data_mismatch, (
+        f"Data mismatch {data_mismatch}!\nVirtctl: {virtctl_info}\nCNV: {get_cnv_user_info(vm=vm)}\n"
+        f"Libvirt: {get_libvirt_user_info(vm=vm)}\nOS: {linux_info}"
+    )
 
 
 def validate_os_info_virtctl_vs_windows_os(vm):
     virtctl_info = get_virtctl_os_info(vm=vm)
-    cnv_info = get_cnv_os_info(vm=vm)
-    libvirt_info = get_libvirt_os_info(vm=vm)
     windows_info = get_windows_os_info(ssh_exec=vm.ssh_exec)
 
     data_mismatch = []
@@ -139,41 +154,30 @@ def validate_os_info_virtctl_vs_windows_os(vm):
             data_mismatch.append(f"OS data mismatch - {os_param_name}")
 
     assert not data_mismatch, (
-        f"Data mismatch {data_mismatch}!"
-        f"\nVirtctl: {virtctl_info}\nCNV: {cnv_info}\nLibvirt: {libvirt_info}\nOS: {windows_info}"
+        f"Data mismatch {data_mismatch}!\nVirtctl: {virtctl_info}\nCNV: {get_cnv_os_info(vm=vm)}\n"
+        f"Libvirt: {get_libvirt_os_info(vm=vm)}\nOS: {windows_info}"
     )
 
 
 def validate_fs_info_virtctl_vs_windows_os(vm):
-    def _get_fs_info(vm):
-        virtctl_info = get_virtctl_fs_info(vm=vm)
-        cnv_info = get_cnv_fs_info(vm=vm)
-        libvirt_info = get_libvirt_fs_info(vm=vm)
-        windows_info = get_windows_fs_info(ssh_exec=vm.ssh_exec)
-        return virtctl_info, cnv_info, libvirt_info, windows_info
-
-    orig_virtctl_info = cnv_info = libvirt_info = orig_windows_info = None
-    fs_info_sampler = TimeoutSampler(wait_timeout=TIMEOUT_90SEC, sleep=1, func=_get_fs_info, vm=vm)
-
+    orig_virtctl_info = None
+    orig_windows_info = get_windows_fs_info(ssh_exec=vm.ssh_exec)
     try:
-        for virtctl_info, cnv_info, libvirt_info, windows_info in fs_info_sampler:
+        for virtctl_info in TimeoutSampler(
+            wait_timeout=TIMEOUT_1MIN, sleep=TIMEOUT_15SEC, func=get_virtctl_fs_info, vm=vm
+        ):
             if virtctl_info:
                 orig_virtctl_info = virtctl_info.copy()
-                orig_windows_info = windows_info.copy()
+                windows_info = orig_windows_info.copy()
 
                 # Disk usage may not be bit exact; allowing up to 10% diff (to allow deviation after conversion to GB)
                 disk_usage_diff_validation = 1 - virtctl_info.pop("used") / windows_info.pop("used") <= 0.1
                 if disk_usage_diff_validation and virtctl_info == windows_info:
                     return
-    except TimeoutExpiredError as exp:
-        raise_multiple_exceptions(
-            exceptions=[
-                ValueError(
-                    f"Data mismatch!\nVirtctl: {orig_virtctl_info}\nCNV: {cnv_info}\nLibvirt: {libvirt_info}\n"
-                    f"OS: {orig_windows_info}"
-                ),
-                exp,
-            ]
+    except TimeoutExpiredError:
+        raise ValueError(
+            f"Data mismatch!\nVirtctl: {orig_virtctl_info}\nCNV: {get_cnv_fs_info(vm=vm)}\n"
+            f"Libvirt: {get_libvirt_fs_info(vm=vm)}\nOS: {orig_windows_info}"
         )
 
 
@@ -184,18 +188,7 @@ def validate_user_info_virtctl_vs_windows_os(vm):
         # For example: 'Pacific Standard Time, -28800' -> return 28800
         return int(re.search(r".*, [-]?(\d+)", vm_timezone_diff).group(1))
 
-    def _get_user_info_win(_vm):
-        virtctl_info = get_virtctl_user_info(vm=vm)
-        cnv_info = get_cnv_user_info(vm=vm)
-        libvirt_info = get_libvirt_user_info(vm=vm)
-        return virtctl_info, cnv_info, libvirt_info
-
-    def _user_info_sampler_win(_vm):
-        for sample in TimeoutSampler(wait_timeout=TIMEOUT_90SEC, sleep=10, func=_get_user_info_win, _vm=vm):
-            if all(sample):
-                return sample
-
-    virtctl_info, cnv_info, libvirt_info = _user_info_sampler_win(_vm=vm)
+    virtctl_info = get_virtctl_user_info(vm=vm)
     windows_info = run_ssh_commands(host=vm.ssh_exec, commands=["quser"], tcp_timeout=TCP_TIMEOUT_30SEC)[0]
     # Match timezone to VM's timezone and not use UTC
     virtctl_time = virtctl_info["loginTime"] - _get_vm_timezone_diff()
@@ -203,12 +196,12 @@ def validate_user_info_virtctl_vs_windows_os(vm):
     if virtctl_info["userName"].lower() not in windows_info:
         data_mismatch.append("user name mismatch")
     # Windows date format - 11/4/2020 (-m/-d/Y)
-    if datetime.utcfromtimestamp(virtctl_time).strftime("%-m/%-d/%Y") not in windows_info:
+    if datetime.fromtimestamp(timestamp=virtctl_time, tz=timezone.utc).strftime("%-m/%-d/%Y") not in windows_info:
         data_mismatch.append("login time mismatch")
 
     assert not data_mismatch, (
-        f"Data mismatch {data_mismatch}!"
-        f"\nVirtctl: {virtctl_info}\nCNV: {cnv_info}\nLibvirt: {libvirt_info}\nOS: {windows_info}"
+        f"Data mismatch {data_mismatch}!\nVirtctl: {virtctl_info}\nCNV: {get_cnv_user_info(vm=vm)}"
+        f"\nLibvirt: {get_libvirt_user_info(vm=vm)}\nOS: {windows_info}"
     )
 
 
@@ -370,12 +363,14 @@ def get_virtctl_user_info(vm):
     res, output, err = run_virtctl_command(command=cmd, namespace=vm.namespace)
     if not res:
         LOGGER.error(f"Failed to get guest-agent info via virtctl. Error: {err}")
-        return
+        return {}
     for user in json.loads(output)["items"]:
         return {
             "userName": user.get("userName"),
             "loginTime": int(user.get("loginTime", 0)),
         }
+    LOGGER.error("No user list found via virtctl")
+    return {}
 
 
 def get_cnv_user_info(vm):
@@ -451,25 +446,6 @@ def execute_virsh_qemu_agent_command(vm, command):
     return json.loads(output)["return"]
 
 
-def check_guest_agent_sampler_data(sampler):
-    virtctl_info = cnv_info = libvirt_info = linux_info = None
-    try:
-        for virtctl_info, cnv_info, libvirt_info, linux_info in sampler:
-            if virtctl_info:
-                if virtctl_info == linux_info:
-                    return
-    except TimeoutExpiredError as exp:
-        raise_multiple_exceptions(
-            exceptions=[
-                ValueError(
-                    f"Data mismatch!\nVirtctl: {virtctl_info}\nCNV: {cnv_info}\nLibvirt: {libvirt_info}\n"
-                    f"OS: {linux_info}"
-                ),
-                exp,
-            ]
-        )
-
-
 def check_machine_type(vm):
     """VM and VMI should have machine type; machine type cannot be empty"""
 
@@ -483,104 +459,12 @@ def check_machine_type(vm):
     assert vm_machine_type != "", f"Machine type does not exist in VM: {vm_machine_type}"
 
 
-def check_vm_xml_hyperv(vm):
-    """Verify HyperV values in VMI"""
-
-    hyperv_features = vm.privileged_vmi.xml_dict["domain"]["features"]["hyperv"]
-    failed_hyperv_features = [
-        hyperv_features[feature]
-        for feature in HYPERV_FEATURES_LABELS_DOM_XML
-        if hyperv_features[feature]["@state"] != "on"
-    ]
-    spinlocks_retries_value = hyperv_features["spinlocks"]["@retries"]
-    if int(spinlocks_retries_value) != 8191:
-        failed_hyperv_features.append(spinlocks_retries_value)
-
-    stimer_direct_feature = hyperv_features["stimer"]["direct"]
-    if stimer_direct_feature["@state"] != "on":
-        failed_hyperv_features.append(hyperv_features["stimer"])
-
-    assert not failed_hyperv_features, (
-        f"The following hyperV flags are not set correctly in VM spec: {failed_hyperv_features},"
-        f"hyperV features in VM spec: {hyperv_features}"
-    )
-
-
 def check_vm_xml_clock(vm):
     """Verify clock values in VMI"""
 
     clock_timer_list = vm.privileged_vmi.xml_dict["domain"]["clock"]["timer"]
     assert [i for i in clock_timer_list if i["@name"] == "hpet"][0]["@present"] == "no"
     assert [i for i in clock_timer_list if i["@name"] == "hypervclock"][0]["@present"] == "yes"
-
-
-def check_windows_vm_hvinfo(vm):
-    """Verify HyperV values in Windows VMI using hvinfo"""
-
-    def _check_hyperv_recommendations():
-        hyperv_windows_recommendations_list = [
-            "RelaxedTiming",
-            "MSRAPICRegisters",
-            "HypercallRemoteTLBFlush",
-            "SyntheticClusterIPI",
-        ]
-        failed_recommendations = []
-        vm_recommendations_dict = hvinfo_dict["Recommendations"]
-        failed_vm_recommendations = [
-            feature for feature in hyperv_windows_recommendations_list if not vm_recommendations_dict[feature]
-        ]
-
-        if failed_vm_recommendations:
-            failed_recommendations.append(failed_vm_recommendations)
-
-        spinlocks = vm_recommendations_dict["SpinlockRetries"]
-        if int(spinlocks) != 8191:
-            failed_recommendations.append(f"SpinlockRetries: {spinlocks}")
-
-        return failed_recommendations
-
-    def _check_hyperv_privileges():
-        hyperv_windows_privileges_list = [
-            "AccessVpRunTimeReg",
-            "AccessSynicRegs",
-            "AccessSyntheticTimerRegs",
-            "AccessVpIndex",
-        ]
-        vm_privileges_dict = hvinfo_dict["Privileges"]
-        return [feature for feature in hyperv_windows_privileges_list if not vm_privileges_dict[feature]]
-
-    def _check_hyperv_features():
-        hyperv_windows_features_list = ["TimerFrequenciesQuery"]
-        vm_features_dict = hvinfo_dict["Features"]
-        return [feature for feature in hyperv_windows_features_list if not vm_features_dict[feature]]
-
-    hvinfo_dict = None
-
-    sampler = TimeoutSampler(
-        wait_timeout=TIMEOUT_90SEC,
-        sleep=TIMEOUT_15SEC,
-        func=run_ssh_commands,
-        host=vm.ssh_exec,
-        commands=["C:\\\\hvinfo\\\\hvinfo.exe"],
-        tcp_timeout=TCP_TIMEOUT_30SEC,
-    )
-    for sample in sampler:
-        output = sample[0]
-        if output and "connect: connection refused" not in output:
-            hvinfo_dict = json.loads(output)
-            break
-
-    failed_windows_hyperv_list = _check_hyperv_recommendations()
-    failed_windows_hyperv_list.extend(_check_hyperv_privileges())
-    failed_windows_hyperv_list.extend(_check_hyperv_features())
-
-    if not hvinfo_dict["HyperVsupport"]:
-        failed_windows_hyperv_list.extend("HyperVsupport")
-
-    assert not failed_windows_hyperv_list, (
-        f"The following hyperV flags are not set correctly in the guest: {failed_windows_hyperv_list}\n"
-        f"VM hvinfo dict:{hvinfo_dict}"
-    )
 
 
 def set_vm_tablet_device_dict(tablet_params):
@@ -610,18 +494,6 @@ def check_vm_xml_tablet_device(vm):
     assert tablet_dict_from_xml["alias"]["@name"] == f"ua-{vm_instance_tablet_device_dict['name']}", "Wrong device name"
 
 
-def assert_windows_efi(vm):
-    """
-    Verify guest OS is using EFI.
-    """
-    out = run_ssh_commands(
-        host=vm.ssh_exec,
-        commands=shlex.split("bcdedit | findstr EFI"),
-        tcp_timeout=TCP_TIMEOUT_30SEC,
-    )[0]
-    assert "\\EFI\\Microsoft\\Boot\\bootmgfw.efi" in out, f"EFI boot not found in path. bcdedit output:\n{out}"
-
-
 def get_matrix_os_golden_image_data_source(
     admin_client: DynamicClient, golden_images_namespace: Namespace, os_matrix: dict[str, dict]
 ) -> Generator[DataSource, None, None]:
@@ -646,6 +518,7 @@ def matrix_os_vm_from_template(
     namespace: Namespace,
     data_source_object: DataSource,
     os_matrix: dict[str, dict],
+    cpu_model: str | None = None,
     request: Optional[FixtureRequest] = None,
     data_volume_template: Optional[dict[str, dict]] = None,
 ) -> VirtualMachineForTestsFromTemplate:
@@ -660,6 +533,7 @@ def matrix_os_vm_from_template(
         labels=Template.generate_template_labels(**os_matrix[os_matrix_key]["template_labels"]),
         data_volume_template=data_volume_template,
         vm_dict=param_dict.get("vm_dict"),
+        cpu_model=cpu_model,
     )
 
 

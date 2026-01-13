@@ -17,7 +17,9 @@ KUBEVIRT_VM_INFO = "kubevirt_vm_info{{name='{vm_name}'}}"
 KUBEVIRT_VMI_STATUS_ADDRESSES = "kubevirt_vmi_status_addresses{{name='{vm_name}'}}"
 KUBEVIRT_VMI_MIGRATION_DATA_PROCESSED_BYTES = "kubevirt_vmi_migration_data_processed_bytes{{name='{vm_name}'}}"
 KUBEVIRT_VMI_MIGRATION_DATA_REMAINING_BYTES = "kubevirt_vmi_migration_data_remaining_bytes{{name='{vm_name}'}}"
-KUBEVIRT_VMI_MIGRATION_DISK_TRANSFER_RATE_BYTES = "kubevirt_vmi_migration_disk_transfer_rate_bytes{{name='{vm_name}'}}"
+KUBEVIRT_VMI_MIGRATION_MEMORY_TRANSFER_RATE_BYTES = (
+    "kubevirt_vmi_migration_memory_transfer_rate_bytes{{name='{vm_name}'}}"
+)
 KUBEVIRT_VMI_MIGRATION_DIRTY_MEMORY_RATE_BYTES = "kubevirt_vmi_migration_dirty_memory_rate_bytes{{name='{vm_name}'}}"
 KUBEVIRT_VM_DISK_ALLOCATED_SIZE_BYTES = "kubevirt_vm_disk_allocated_size_bytes{{name='{vm_name}'}}"
 KUBEVIRT_VMI_MIGRATIONS_IN_SCHEDULING_PHASE = "kubevirt_vmi_migrations_in_scheduling_phase"
@@ -26,5 +28,14 @@ KUBEVIRT_VMI_MIGRATION_DATA_TOTAL_BYTES = "kubevirt_vmi_migration_data_total_byt
 KUBEVIRT_VMI_PHASE_TRANSITION_TIME_FROM_DELETION_SECONDS_SUM_SUCCEEDED = (
     "kubevirt_vmi_phase_transition_time_from_deletion_seconds_sum{phase='Succeeded'}"
 )
+KUBEVIRT_VM_CREATED_BY_POD_TOTAL = "sum(kubevirt_vm_created_by_pod_total{{namespace='{namespace}'}})"
 BINDING_NAME = "binding_name"
 BINDING_TYPE = "binding_type"
+KUBEVIRT_VMI_GUEST_LOAD_METRIC = "kubevirt_vmi_guest_load"
+GUEST_LOAD_TIME_PERIODS = [
+    f"{KUBEVIRT_VMI_GUEST_LOAD_METRIC}_1m",
+    f"{KUBEVIRT_VMI_GUEST_LOAD_METRIC}_5m",
+    f"{KUBEVIRT_VMI_GUEST_LOAD_METRIC}_15m",
+]
+
+KUBEVIRT_VMI_NODE_CPU_AFFINITY = "kubevirt_vmi_node_cpu_affinity{{kubernetes_vmi_label_kubevirt_io_domain='{vm_name}'}}"

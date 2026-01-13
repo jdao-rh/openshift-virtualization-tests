@@ -56,7 +56,7 @@ dependencies = [
   "pexpect>=4.9.0",
   "podman>=5.2.0",
   "pyhelper-utils>=1.0.1",
-  "pytest>=8.3.3",
+  "pytest>=9.0.0",
   "pytest-benchmark>=5.1.0",
   "pytest-dependency>=0.6.0",
   "pytest-jira~=0.3.21",
@@ -79,12 +79,13 @@ dependencies = [
   "pytest-html>=4.1.1",
   "openshift-python-wrapper>=11.0.93",
   "marshmallow==3.26.1",
+  "cachetools>=6.2.2",
 ]
 
 [project.optional-dependencies]
 # Dependencies for utilities unit testing
 utilities-test = [
-  "pytest>=8.3.3",
+  "pytest>=9.0.0",
   "pytest-cov>=4.1.0",
   "pytest-mock>=3.14.0",
   "pytest-xdist>=3.5.0",
@@ -99,13 +100,14 @@ packages = ["*"]
 dev = [
     "ipdb>=0.13.13",
     "ipython>=8.12.3",
+    "pytest-repeat>=0.9.4",
 ]
 
 [tool.uv.sources]
 
 # Utilities Unit Testing Configuration
 [tool.pytest.ini_options]
-minversion = "8.0"
+minversion = "9.0"
 testpaths = ["utilities/unittests"]
 python_files = "test_*.py"
 python_classes = "Test*"
@@ -133,11 +135,9 @@ omit = [
   "*/test_*.py",
   "__init__.py",
   "utilities/unittests/conftest.py",
-  # TODO: Add coverage to these large modules when individual fixes are needed
-  "utilities/hco.py",
+  # Large modules with partial test coverage - excluded until full coverage is achieved
   "utilities/infra.py",
   "utilities/network.py",
-  "utilities/operator.py",
   "utilities/storage.py",
   "utilities/virt.py",
 ]

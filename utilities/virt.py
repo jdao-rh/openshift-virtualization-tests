@@ -45,6 +45,8 @@ from pytest_testconfig import config as py_config
 from rrmngmnt import Host, ssh, user
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+import utilities.cpu
+import utilities.data_utils
 import utilities.infra
 from utilities.console import Console
 from utilities.constants import (
@@ -818,7 +820,7 @@ class VirtualMachineForTests(VirtualMachine):
             cloud_init_user_data += f"{cloud_init_user_data_newline}{login_generated_data['userData']}"
 
         # Add RSA to authorized_keys to enable login using an SSH key
-        authorized_key = utilities.infra.authorized_key(private_key_path=os.environ[CNV_VM_SSH_KEY_PATH])
+        authorized_key = utilities.data_utils.authorized_key(private_key_path=os.environ[CNV_VM_SSH_KEY_PATH])
         cloud_init_user_data += f"\nssh_authorized_keys:\n [{authorized_key}]"
 
         # Enable LEGACY crypto policies - needed until keys updated to ECDSA
@@ -1014,7 +1016,7 @@ class VirtualMachineForTests(VirtualMachine):
                 if sc_name:
                     return sc_name
             else:
-                return get_default_storage_class().name
+                return get_default_storage_class(client=self.client).name
 
         api_name = "pvc" if self.data_volume_template and self.data_volume_template["spec"].get("pvc") else "storage"
         return (
@@ -1315,7 +1317,9 @@ class VirtualMachineForTestsFromTemplate(VirtualMachineForTests):
         # To apply this logic, self.access_modes should be available.
         if not self.sno_cluster and (not self.eviction_strategy and not (self.diskless_vm or self.non_existing_pvc)):
             if not self.access_modes:
-                self.access_modes = get_default_storage_class().storage_profile.first_claim_property_set_access_modes()
+                self.access_modes = get_default_storage_class(
+                    client=self.client
+                ).storage_profile.first_claim_property_set_access_modes()
             if DataVolume.AccessMode.RWX not in self.access_modes:
                 spec[EVICTIONSTRATEGY] = "None"
 
@@ -1431,8 +1435,8 @@ def fedora_vm_body(name: str) -> dict[str, Any]:
     image_info = get_oc_image_info(
         image=image,
         pull_secret=pull_secret,
-        architecture=utilities.infra.get_nodes_cpu_architecture(
-            nodes=list(Node.get(dyn_client=get_client())),
+        architecture=utilities.cpu.get_nodes_cpu_architecture(
+            nodes=list(Node.get(client=get_client())),
         ),
     )
     image_digest = image_info["digest"]
@@ -1645,33 +1649,6 @@ def get_windows_os_dict(windows_version: str) -> dict[str, Any]:
     return {}
 
 
-def get_rhel_os_dict(rhel_version: str) -> dict[str, Any]:
-    """
-    Returns a dictionary of RHEL os information from the system_rhel_os_matrix in py_config.
-
-    Args:
-        rhel_version: The version of RHEL to get the os information for.
-
-    Returns:
-        dict: OS dictionary for the version, or empty dict if matrix is missing
-
-    Raises:
-        KeyError: If matrix exists but version is not found
-    """
-    if py_system_rhel_os_matrix := py_config.get("system_rhel_os_matrix"):
-        rhel_os_dict = [
-            os_dict
-            for rhel_os in py_system_rhel_os_matrix
-            for os_name, os_dict in rhel_os.items()
-            if os_name == rhel_version
-        ]
-        if rhel_os_dict:
-            return rhel_os_dict[0]
-        raise KeyError(f"Failed to extract {rhel_version} from system_rhel_os_matrix")
-
-    return {}
-
-
 def assert_vm_not_error_status(vm: VirtualMachineForTests, timeout: int = TIMEOUT_5SEC) -> None:
     try:
         for status in TimeoutSampler(
@@ -1721,7 +1698,7 @@ def wait_for_running_vm(
         if check_ssh_connectivity:
             wait_for_ssh_connectivity(vm=vm, timeout=ssh_timeout)
     except TimeoutExpiredError:
-        collect_vnc_screenshot_for_vms(vm_name=vm.name, vm_namespace=vm.namespace)
+        collect_vnc_screenshot_for_vms(vm_name=vm.name, vm_namespace=vm.namespace)  # type: ignore[arg-type]
         raise
 
 
@@ -1874,7 +1851,7 @@ def wait_for_migration_finished(namespace, migration, timeout=TIMEOUT_12MIN):
                 if counter >= TIMEOUT_4MIN / sleep:
                     # Get status/events for PODs in non-running or failed state
                     for pod in utilities.infra.get_pod_by_name_prefix(
-                        dyn_client=get_client(),
+                        client=get_client(),
                         pod_prefix=VIRT_LAUNCHER,
                         namespace=namespace,
                         get_all=True,
@@ -2101,7 +2078,7 @@ def wait_for_node_schedulable_status(node, status, timeout=60):
 
 def get_hyperconverged_kubevirt(admin_client, hco_namespace):
     for kv in KubeVirt.get(
-        dyn_client=admin_client,
+        client=admin_client,
         namespace=hco_namespace.name,
         name="kubevirt-kubevirt-hyperconverged",
     ):
@@ -2122,7 +2099,7 @@ def get_base_templates_list(client):
     """Return SSP base templates"""
     common_templates_list = list(
         Template.get(
-            dyn_client=client,
+            client=client,
             singular_name=Template.singular_name,
             label_selector=Template.Labels.BASE,
         )
@@ -2137,10 +2114,10 @@ def get_base_templates_list(client):
 def get_template_by_labels(admin_client, template_labels):
     template = list(
         Template.get(
-            dyn_client=admin_client,
+            client=admin_client,
             singular_name=Template.singular_name,
             namespace="openshift",
-            label_selector=",".join([f"{label}=true" for label in template_labels if OS_FLAVOR_FEDORA not in label]),
+            label_selector=",".join([label for label in template_labels if OS_FLAVOR_FEDORA not in label]),
         ),
     )
     if any(
@@ -2207,7 +2184,7 @@ def get_created_migration_job(vm, timeout=TIMEOUT_1MIN, client=None):
         func=VirtualMachineInstanceMigration.get,
         namespace=vm.namespace,
         vmi_name=vm.vmi.name,
-        dyn_client=client,
+        client=client,
     )
     try:
         for sample in sampler:
@@ -2220,7 +2197,7 @@ def get_created_migration_job(vm, timeout=TIMEOUT_1MIN, client=None):
         raise
 
 
-def check_migration_process_after_node_drain(dyn_client, vm):
+def check_migration_process_after_node_drain(client, vm):
     """
     Wait for migration process to succeed and verify that VM indeed moved to new node.
     """
@@ -2228,7 +2205,7 @@ def check_migration_process_after_node_drain(dyn_client, vm):
     source_node = vm.privileged_vmi.virt_launcher_pod.node
     LOGGER.info(f"The VMI was running on {source_node.name}")
     wait_for_node_schedulable_status(node=source_node, status=False)
-    vmim = get_created_migration_job(vm=vm, client=dyn_client, timeout=TIMEOUT_5MIN)
+    vmim = get_created_migration_job(vm=vm, client=client, timeout=TIMEOUT_5MIN)
     wait_for_migration_finished(
         namespace=vm.namespace, migration=vmim, timeout=TIMEOUT_30MIN if "windows" in vm.name else TIMEOUT_10MIN
     )
@@ -2281,11 +2258,11 @@ def wait_for_kubevirt_conditions(
     )
 
 
-def get_all_virt_pods_with_running_status(dyn_client, hco_namespace):
+def get_all_virt_pods_with_running_status(client, hco_namespace):
     virt_pods_with_status = {
         pod.name: pod.status
         for pod in Pod.get(
-            dyn_client=dyn_client,
+            client=client,
             namespace=hco_namespace.name,
         )
         if pod.name.startswith("virt")
@@ -2451,8 +2428,9 @@ def wait_for_vmi_relocation_and_running(initial_node, vm, timeout=TIMEOUT_5MIN):
         for sample in TimeoutSampler(
             wait_timeout=timeout,
             sleep=TIMEOUT_5SEC,
-            func=lambda: vm.vmi.node.name != initial_node.name
-            and vm.vmi.status == VirtualMachineInstance.Status.RUNNING,
+            func=lambda: (
+                vm.vmi.node.name != initial_node.name and vm.vmi.status == VirtualMachineInstance.Status.RUNNING
+            ),
         ):
             if sample:
                 LOGGER.info(
@@ -2489,23 +2467,18 @@ def assert_linux_efi(vm: VirtualMachineForTests) -> None:
     return run_ssh_commands(host=vm.ssh_exec, commands=shlex.split("ls -ld /sys/firmware/efi"))[0]
 
 
-def pause_optional_migrate_unpause_and_check_connectivity(vm: VirtualMachineForTests, migrate: bool = False) -> None:
-    vmi = VirtualMachineInstance(client=get_client(), name=vm.vmi.name, namespace=vm.vmi.namespace)
-    vmi.pause(wait=True)
-    if migrate:
-        migrate_vm_and_verify(vm=vm, wait_for_interfaces=False)
-    vmi.unpause(wait=True)
+def pause_unpause_vm_and_check_connectivity(vm: VirtualMachineForTests) -> None:
+    vm.vmi.pause(wait=True)
+    vm.vmi.unpause(wait=True)
     LOGGER.info("Verify VM is running and ready after unpause")
-    wait_for_running_vm(vm=vm)
+    wait_for_ssh_connectivity(vm=vm, timeout=TIMEOUT_2MIN)
 
 
-def validate_pause_optional_migrate_unpause_linux_vm(
-    vm: VirtualMachineForTests, pre_pause_pid: int | None = None, migrate: bool = False
-) -> None:
+def validate_pause_unpause_linux_vm(vm: VirtualMachineForTests, pre_pause_pid: int | None = None) -> None:
     proc_name = OS_PROC_NAME["linux"]
     if not pre_pause_pid:
         pre_pause_pid = start_and_fetch_processid_on_linux_vm(vm=vm, process_name=proc_name, args="localhost")
-    pause_optional_migrate_unpause_and_check_connectivity(vm=vm, migrate=migrate)
+    pause_unpause_vm_and_check_connectivity(vm=vm)
     post_pause_pid = fetch_pid_from_linux_vm(vm=vm, process_name=proc_name)
     kill_processes_by_name_linux(vm=vm, process_name=proc_name)
     assert post_pause_pid == pre_pause_pid, (
@@ -2528,6 +2501,9 @@ def check_vm_xml_smbios(vm: VirtualMachineForTests, cm_values: Dict[str, str]) -
         "product": smbios_vm_dict["product"] == cm_values["product"],
         "family": smbios_vm_dict["family"] == cm_values["family"],
         "version": smbios_vm_dict["version"] == cm_values["version"],
+        "sku": smbios_vm_dict["sku"] == cm_values["sku"],
+        "serial": smbios_vm_dict.get("serial"),
+        "uuid": smbios_vm_dict.get("uuid"),
     }
     LOGGER.info(f"Results: {results}")
     assert all(results.values())
@@ -2629,7 +2605,11 @@ def validate_virtctl_guest_agent_data_over_time(vm: VirtualMachineForTests) -> b
 
 
 def get_vm_boot_time(vm: VirtualMachineForTests) -> str:
-    boot_command = 'net statistics workstation | findstr "Statistics since"' if "windows" in vm.name else "who -b"
+    boot_command = (
+        'net statistics workstation | findstr "Statistics since"'
+        if "windows" in vm.name  # type: ignore[operator]
+        else "who -b"
+    )
     return run_ssh_commands(host=vm.ssh_exec, commands=shlex.split(boot_command))[0]
 
 
@@ -2711,7 +2691,7 @@ def wait_for_user_agent_down(vm: VirtualMachineForTests, timeout: int) -> None:
 
 def get_virt_handler_pods(client: DynamicClient, namespace: Namespace) -> List[Pod]:
     return utilities.infra.get_pods(
-        dyn_client=client,
+        client=client,
         namespace=namespace,
         label=f"{Pod.ApiGroup.KUBEVIRT_IO}={VIRT_HANDLER}",
     )

@@ -6,7 +6,8 @@ import pytest
 
 from tests.network.utils import wait_for_address_on_iface
 from utilities.constants import LINUX_BRIDGE, NMSTATE_HANDLER
-from utilities.infra import get_daemonset_by_name, get_node_pod, get_node_selector_dict, name_prefix
+from utilities.data_utils import name_prefix
+from utilities.infra import get_daemonset_by_name, get_node_pod, get_node_selector_dict
 from utilities.network import network_device
 from utilities.virt import VirtualMachineForTests, fedora_vm_body
 
@@ -70,6 +71,7 @@ def running_nmstate_vmb(nmstate_vmb):
 
 @pytest.fixture(scope="module")
 def bridge_on_management_ifaces_node1(
+    admin_client,
     worker_nodes_management_iface_stats,
     worker_node1,
     workers_utility_pods,
@@ -85,6 +87,7 @@ def bridge_on_management_ifaces_node1(
         ports=[management_iface],
         ipv4_enable=True,
         ipv4_dhcp=True,
+        client=admin_client,
     ) as br_dev:
         # Wait for bridge to get management IP
         wait_for_address_on_iface(worker_pod=worker_pod, iface_name=br_dev.bridge_name)
@@ -96,6 +99,7 @@ def bridge_on_management_ifaces_node1(
 
 @pytest.fixture(scope="module")
 def bridge_on_management_ifaces_node2(
+    admin_client,
     workers_utility_pods,
     worker_nodes_management_iface_stats,
     worker_node2,
@@ -111,6 +115,7 @@ def bridge_on_management_ifaces_node2(
         ports=[management_iface],
         ipv4_enable=True,
         ipv4_dhcp=True,
+        client=admin_client,
     ) as br_dev:
         # Wait for bridge to get management IP
         wait_for_address_on_iface(worker_pod=worker_pod, iface_name=br_dev.bridge_name)

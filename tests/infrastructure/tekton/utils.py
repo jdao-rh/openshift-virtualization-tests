@@ -14,6 +14,7 @@ from ocp_resources.pipeline_run import PipelineRun
 from ocp_resources.resource import Resource
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from utilities.artifactory import get_http_image_url
 from utilities.constants import (
     TIMEOUT_1MIN,
     TIMEOUT_5SEC,
@@ -25,7 +26,6 @@ from utilities.constants import (
     WIN_11,
     Images,
 )
-from utilities.infra import get_http_image_url
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,12 +59,14 @@ def win_iso_download_url_for_pipelineref():
     }
 
 
-def wait_for_tekton_resource_availability(tekton_namespace, tekton_resource_kind, resource_name):
+def wait_for_tekton_resource_availability(tekton_namespace, tekton_resource_kind, resource_name, client):
     try:
         for sample in TimeoutSampler(
             wait_timeout=TIMEOUT_10SEC,
             sleep=TIMEOUT_5SEC,
-            func=lambda: tekton_resource_kind(namespace=tekton_namespace.name, name=resource_name).exists,
+            func=lambda: (
+                tekton_resource_kind(namespace=tekton_namespace.name, name=resource_name, client=client).exists
+            ),
         ):
             if sample:
                 return True
@@ -103,11 +105,11 @@ def update_tekton_resources_yaml_file(file_path, replacements):
         file.write(yaml_content)
 
 
-def process_yaml_files(file_paths, replacements, resource_kind, namespace):
+def process_yaml_files(client, file_paths, replacements, resource_kind, namespace):
     resources = []
     for file_path in file_paths:
         update_tekton_resources_yaml_file(file_path=file_path, replacements=replacements)
-        resources.append(resource_kind(yaml_file=file_path, namespace=namespace).create())
+        resources.append(resource_kind(yaml_file=file_path, namespace=namespace, client=client).create())
     return resources
 
 
