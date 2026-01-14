@@ -16,7 +16,6 @@ from tests.virt.cluster.vm_cloning.utils import (
     check_if_files_present_after_cloning,
 )
 from utilities.constants import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE, Images
-
 from utilities.storage import (
     add_dv_to_vm,
     check_disk_count_in_vm,
