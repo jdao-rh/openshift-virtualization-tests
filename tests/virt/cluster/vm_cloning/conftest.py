@@ -9,6 +9,7 @@ from ocp_resources.virtual_machine_cluster_preference import (
 from utilities.constants import (
     OS_FLAVOR_RHEL,
     RHEL9_PREFERENCE,
+    RHEL9_PREFERENCE_S390X,
     RHEL_WITH_INSTANCETYPE_AND_PREFERENCE,
     U1_SMALL,
     Images,
@@ -40,14 +41,16 @@ def fedora_vm_for_cloning(request, unprivileged_client, namespace, cpu_for_migra
 
 
 @pytest.fixture(scope="class")
-def rhel_vm_with_instancetype_and_preference_for_cloning(namespace, unprivileged_client):
+def rhel_vm_with_instancetype_and_preference_for_cloning(is_s390x_cluster, namespace, unprivileged_client):
     with VirtualMachineForCloning(
         name=RHEL_WITH_INSTANCETYPE_AND_PREFERENCE,
         image=Images.Rhel.RHEL9_REGISTRY_GUEST_IMG,
         namespace=namespace.name,
         client=unprivileged_client,
         vm_instance_type=VirtualMachineClusterInstancetype(name=U1_SMALL),
-        vm_preference=VirtualMachineClusterPreference(name=RHEL9_PREFERENCE),
+        vm_preference=VirtualMachineClusterPreference(
+            name=RHEL9_PREFERENCE_S390X if is_s390x_cluster else RHEL9_PREFERENCE
+        ),
         os_flavor=OS_FLAVOR_RHEL,
     ) as vm:
         running_vm(vm=vm)

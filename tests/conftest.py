@@ -1088,9 +1088,6 @@ def modern_cpu_for_migration(cluster_common_modern_node_cpu, host_cpu_model, nod
         )
     )
 
-@pytest.fixture(scope="session")
-def is_s390x_cluster(nodes_cpu_architecture):
-    return nodes_cpu_architecture == S390X
 
 @pytest.fixture(scope="module")
 def skip_if_no_common_cpu(cluster_common_node_cpu, nodes_cpu_architecture):
