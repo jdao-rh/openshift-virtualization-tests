@@ -63,12 +63,6 @@ def vm_with_dv_for_cloning(
     golden_image_data_volume_template_for_test_scope_function,
     is_s390x_cluster,
 ):
-    if is_s390x_cluster:
-        smm_enabled = False
-        efi_params = None
-    else:
-        smm_enabled = True
-        efi_params = {"secureBoot": True}
     with VirtualMachineForCloning(
         name=request.param["vm_name"],
         namespace=namespace.name,
@@ -77,8 +71,8 @@ def vm_with_dv_for_cloning(
         memory_guest=request.param["memory_guest"],
         cpu_cores=request.param.get("cpu_cores", 1),
         os_flavor=request.param["vm_name"].split("-")[0],
-        smm_enabled=smm_enabled,
-        efi_params=efi_params,
+        smm_enabled=False if is_s390x_cluster else True,
+        efi_params=None if is_s390x_cluster else {"secureBoot": True},
     ) as vm:
         # Add second DV when needed
         if request.param.get("extra_dv"):
