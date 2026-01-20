@@ -24,7 +24,12 @@ from utilities.virt import (
 
 @pytest.fixture(scope="class")
 def latest_rhel_vm_preference():
-    latest_rhel = max(py_config["instance_type_rhel_os_matrix"], key=lambda d: int(next(iter(d)).split(".")[1]))
+    def version_key(d):
+        key_str = next(iter(d))
+        parts = key_str.split('.')
+        version_parts = parts[1:-1]
+        return tuple(map(int, version_parts))
+    latest_rhel = max(py_config["instance_type_rhel_os_matrix"], key=version_key)
     return latest_rhel[next(iter(latest_rhel))]["preference"]
 
 
