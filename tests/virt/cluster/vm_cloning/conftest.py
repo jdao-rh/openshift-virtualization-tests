@@ -26,9 +26,10 @@ from utilities.virt import (
 def latest_rhel_vm_preference():
     def version_key(d):
         key_str = next(iter(d))
-        parts = key_str.split('.')
+        parts = key_str.split(".")
         version_parts = parts[1:-1]
         return tuple(map(int, version_parts))
+
     latest_rhel = max(py_config["instance_type_rhel_os_matrix"], key=version_key)
     return latest_rhel[next(iter(latest_rhel))]["preference"]
 
