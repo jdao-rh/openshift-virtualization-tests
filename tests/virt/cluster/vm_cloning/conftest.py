@@ -46,9 +46,7 @@ def fedora_vm_for_cloning(request, unprivileged_client, namespace, cpu_for_migra
 
 
 @pytest.fixture(scope="class")
-def rhel_vm_with_instancetype_and_preference_for_cloning(
-    is_s390x_cluster, namespace, unprivileged_client, latest_rhel_vm_preference
-):
+def rhel_vm_with_instancetype_and_preference_for_cloning(namespace, unprivileged_client, latest_rhel_vm_preference):
     with VirtualMachineForCloning(
         name=RHEL_WITH_INSTANCETYPE_AND_PREFERENCE,
         image=Images.Rhel.RHEL9_REGISTRY_GUEST_IMG,
