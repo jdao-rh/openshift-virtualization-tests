@@ -172,7 +172,6 @@ def test_clone_vm_with_instance_type_and_preference(
     check_disk_count_in_vm(vm=target_vm_scope_function)
 
 
-@pytest.mark.s390x
 @pytest.mark.parametrize(
     "golden_image_data_source_for_test_scope_function, vm_with_dv_for_cloning, cloning_job_scope_function",
     [
@@ -206,7 +205,6 @@ def test_clone_windows_vm(
     assert_target_vm_has_new_pvc_disks(source_vm=vm_with_dv_for_cloning, target_vm=target_vm_scope_function)
 
 
-@pytest.mark.s390x
 @pytest.mark.parametrize(
     "fedora_vm_for_cloning, cloning_job_fedora_vm",
     [
