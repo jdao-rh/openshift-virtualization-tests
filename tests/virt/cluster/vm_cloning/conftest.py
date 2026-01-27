@@ -5,14 +5,13 @@ from ocp_resources.virtual_machine_cluster_instancetype import (
 from ocp_resources.virtual_machine_cluster_preference import (
     VirtualMachineClusterPreference,
 )
-from pytest_testconfig import config as py_config
 
 from utilities.constants import (
     OS_FLAVOR_RHEL,
+    RHEL10_PREFERENCE,
     RHEL_WITH_INSTANCETYPE_AND_PREFERENCE,
     U1_SMALL,
     Images,
-    RHEL10_PREFERENCE,
 )
 from utilities.virt import (
     VirtualMachineForCloning,
@@ -26,8 +25,8 @@ from utilities.virt import (
 @pytest.fixture(scope="class")
 def latest_rhel_vm_preference(instance_type_rhel_os_matrix__class__):
     for rhel_version in instance_type_rhel_os_matrix__class__:
-        if instance_type_rhel_os_matrix__class__[rhel_version]['latest_released']:
-            return instance_type_rhel_os_matrix__class__[rhel_version]['preference']
+        if instance_type_rhel_os_matrix__class__[rhel_version]["latest_released"]:
+            return instance_type_rhel_os_matrix__class__[rhel_version]["preference"]
     return RHEL10_PREFERENCE
 
 
