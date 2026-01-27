@@ -12,6 +12,7 @@ from utilities.constants import (
     RHEL_WITH_INSTANCETYPE_AND_PREFERENCE,
     U1_SMALL,
     Images,
+    RHEL10_PREFERENCE,
 )
 from utilities.virt import (
     VirtualMachineForCloning,
@@ -23,15 +24,11 @@ from utilities.virt import (
 
 
 @pytest.fixture(scope="class")
-def latest_rhel_vm_preference():
-    def version_key(d):
-        key_str = next(iter(d))
-        parts = key_str.split(".")
-        version_parts = parts[1:-1]
-        return tuple(map(int, version_parts))
-
-    latest_rhel = max(py_config["instance_type_rhel_os_matrix"], key=version_key)
-    return latest_rhel[next(iter(latest_rhel))]["preference"]
+def latest_rhel_vm_preference(instance_type_rhel_os_matrix__class__):
+    for rhel_version in instance_type_rhel_os_matrix__class__:
+        if instance_type_rhel_os_matrix__class__[rhel_version]['latest_released']:
+            return instance_type_rhel_os_matrix__class__[rhel_version]['preference']
+    return RHEL10_PREFERENCE
 
 
 @pytest.fixture(scope="class")
