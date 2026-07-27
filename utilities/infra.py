@@ -1167,8 +1167,15 @@ def get_node_selector_dict(node_selector):
 
 
 def get_linux_guest_agent_version(ssh_exec):
-    ssh_exec.sudo = True
-    return guest_agent_version_parser(version_string=ssh_exec.package_manager.info("qemu-guest-agent"))
+    # PackageManagerProxy probes with `which <binary>`. With sudo=True that becomes `sudo which ...`,
+    # which fails on guests where sudo requires a TTY or tightens PATH (seen on some s390x images).
+    prior_sudo = ssh_exec.sudo
+    ssh_exec.sudo = False
+    try:
+        version_output = ssh_exec.package_manager.info("qemu-guest-agent")
+    finally:
+        ssh_exec.sudo = prior_sudo
+    return guest_agent_version_parser(version_string=version_output)
 
 
 def get_linux_os_info(ssh_exec):

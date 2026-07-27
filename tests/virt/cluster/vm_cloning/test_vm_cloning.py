@@ -18,7 +18,7 @@ from tests.virt.cluster.vm_cloning.utils import (
     assert_target_vm_has_new_pvc_disks,
     check_if_files_present_after_cloning,
 )
-from utilities.constants import Images
+from utilities.constants import TIMEOUT_4MIN, TIMEOUT_10MIN, Images
 from utilities.constants.instance_types import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE
 from utilities.storage import (
     add_dv_to_vm,
@@ -71,6 +71,7 @@ def vm_with_dv_for_cloning(
     unprivileged_client,
     namespace,
     golden_image_data_volume_template_for_test_scope_function,
+    is_s390x_cluster,
 ):
     with VirtualMachineForCloning(
         name=request.param["vm_name"],
@@ -88,7 +89,7 @@ def vm_with_dv_for_cloning(
             add_dv_to_vm(
                 vm=vm, template_dv=dummy_dv_dict_for_vm_cloning(client=unprivileged_client, namespace=namespace)
             )
-        running_vm(vm=vm)
+        running_vm(vm=vm, wait_until_running_timeout=TIMEOUT_10MIN if is_s390x_cluster else TIMEOUT_4MIN)
         yield vm
 
 
