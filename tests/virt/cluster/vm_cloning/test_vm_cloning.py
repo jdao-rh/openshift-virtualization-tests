@@ -19,8 +19,8 @@ from tests.virt.cluster.vm_cloning.utils import (
     check_if_files_present_after_cloning,
 )
 from utilities.constants import Images
-from utilities.constants.timeouts import TIMEOUT_4MIN, TIMEOUT_10MIN
 from utilities.constants.instance_types import RHEL_WITH_INSTANCETYPE_AND_PREFERENCE
+from utilities.constants.timeouts import TIMEOUT_4MIN, TIMEOUT_10MIN
 from utilities.storage import (
     add_dv_to_vm,
     check_disk_count_in_vm,
